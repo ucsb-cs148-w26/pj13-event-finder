@@ -1,0 +1,2 @@
+I'm Aavash, a 4th year computer science student.
+The purpose of this app is to help people find events in their area. Whether they are new to a city or simply looking for things to do, this app is designed to help them find events.
