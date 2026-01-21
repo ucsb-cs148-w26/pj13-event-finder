@@ -1,0 +1,1 @@
+All of our team members are familiar with at least one part of the tech stack. We all have previous experience with React and Vercel deployments, and those who have less experience can receive guidance from those with more. The goal is to be familiar with React, Vercel, Firebase as a cloud database, and pulling from different APIs to source our information.
