@@ -1,8 +1,8 @@
 # Project: Event Finder
 
 ## Deployment
-https://pj13-event-finder-2j74.vercel.app/
-
+FrontEnd: https://pj13-event-finder-2j74.vercel.app/
+BackEnd: https://pj13-event-finder-backend.vercel.app/
 ## Description
 Event finder is an app that allows a user to search for events in their area and the click of a button.
 
