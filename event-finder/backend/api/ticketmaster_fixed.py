@@ -17,9 +17,6 @@ def fetch_events(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None
 ) -> Dict[str, Any]:
-    """
-    Service function to query Ticketmaster API and format the results.
-    """
     
     if not TICKETMASTER_API_KEY:
         return {
