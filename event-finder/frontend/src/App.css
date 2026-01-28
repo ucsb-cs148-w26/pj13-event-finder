@@ -214,6 +214,16 @@
   transform: translateY(0);
 }
 
+.search-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.search-button:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
 .results-section {
   background: white;
   padding: 2rem;
@@ -233,6 +243,26 @@
   color: #666;
 }
 
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: #667eea;
+  font-size: 1.1rem;
+}
+
+.error-message {
+  background-color: #fee;
+  border: 2px solid #fcc;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  color: #c33;
+}
+
+.error-message p {
+  margin: 0;
+}
+
 .events-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -241,10 +271,12 @@
 
 .event-card {
   background: #f8f9fa;
-  padding: 1.5rem;
   border-radius: 8px;
   border: 2px solid #e0e0e0;
   transition: all 0.3s;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .event-card:hover {
@@ -253,17 +285,44 @@
   transform: translateY(-2px);
 }
 
+.event-image {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  background-color: #e0e0e0;
+}
+
+.event-content {
+  padding: 1.5rem;
+}
+
 .event-card h3 {
   margin: 0 0 0.75rem 0;
   color: #333;
   font-size: 1.3rem;
 }
 
+.event-venue,
 .event-location,
-.event-date {
+.event-date,
+.event-price {
   margin: 0.5rem 0;
   color: #666;
   font-size: 0.95rem;
+}
+
+.event-link {
+  display: inline-block;
+  margin-top: 1rem;
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s;
+}
+
+.event-link:hover {
+  color: #764ba2;
+  text-decoration: underline;
 }
 
 .app-footer {

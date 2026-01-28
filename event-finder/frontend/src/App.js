@@ -14,23 +14,88 @@ function App() {
   });
   const [showFilters, setShowFilters] = useState(false);
   const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSearch = (e) => {
+  const handleSearch = async (e) => {
     e.preventDefault();
-    // TODO: Implement API call to backend
-    console.log('Searching for events:', { location, startDate, endDate, filters });
-    // Placeholder: Set some mock events
-    setEvents([
-      { id: 1, name: 'Sample Event 1', location: location || 'Location', date: startDate || 'TBD' },
-      { id: 2, name: 'Sample Event 2', location: location || 'Location', date: startDate || 'TBD' }
-    ]);
-  };
+    setLoading(true);
+    setError('');
+    setEvents([]);
 
-  const handleFilterChange = (filterName, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [filterName]: value
-    }));
+    try {
+      // Build query parameters
+      const params = new URLSearchParams();
+      params.append('location', location);
+      
+      // Auto-fill default times if user only entered dates
+      let processedStartDate = startDate;
+      let processedEndDate = endDate;
+      
+      if (startDate) {
+        // If no time portion, default to 00:00 (midnight)
+        if (!startDate.includes('T')) {
+          processedStartDate = startDate + 'T00:00';
+        } else {
+          // If time portion exists but is empty or 00:00, ensure it's 00:00
+          const [datePart, timePart] = startDate.split('T');
+          if (!timePart || timePart === '00:00') {
+            processedStartDate = datePart + 'T00:00';
+          }
+        }
+        // Send full datetime to backend
+        params.append('start_date', processedStartDate);
+      }
+      
+      if (endDate) {
+        // If no time portion, default to 23:59 (11:59 PM)
+        if (!endDate.includes('T')) {
+          processedEndDate = endDate + 'T23:59';
+        } else {
+          // If time portion exists but is empty or 00:00, set to 23:59
+          const [datePart, timePart] = endDate.split('T');
+          if (!timePart || timePart === '00:00') {
+            processedEndDate = datePart + 'T23:59';
+          }
+        }
+        // Send full datetime to backend
+        params.append('end_date', processedEndDate);
+      }
+      if (filters.eventType.length > 0) {
+        params.append('event_type', filters.eventType[0]); // Ticketmaster API typically takes one classification
+      }
+      if (filters.category.length > 0) {
+        params.append('category', filters.category[0]);
+      }
+      if (filters.priceRange.min) {
+        params.append('min_price', filters.priceRange.min);
+      }
+      if (filters.priceRange.max) {
+        params.append('max_price', filters.priceRange.max);
+      }
+
+      // Call backend API
+      // For local development, use http://localhost:8000 or your backend URL
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+      const apiUrl = `${backendUrl}/api/events?${params.toString()}`;
+      
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+
+      if (data.error) {
+        setError(data.error);
+      } else {
+        setEvents(data.events || []);
+        if (data.events && data.events.length === 0) {
+          setError('No events found. Try adjusting your search criteria.');
+        }
+      }
+    } catch (err) {
+      setError(`Failed to search events: ${err.message}`);
+      console.error('Search error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePriceRangeChange = (field, value) => {
@@ -234,14 +299,23 @@ function App() {
             </div>
           )}
 
-          <button type="submit" className="search-button">
-            Search Events
+          <button type="submit" className="search-button" disabled={loading}>
+            {loading ? 'Searching...' : 'Search Events'}
           </button>
         </form>
 
         <div className="results-section">
           <h2>Search Results</h2>
-          {events.length === 0 ? (
+          {error && (
+            <div className="error-message">
+              <p>{error}</p>
+            </div>
+          )}
+          {loading ? (
+            <div className="loading">
+              <p>Loading events...</p>
+            </div>
+          ) : events.length === 0 && !error ? (
             <div className="no-results">
               <p>Enter a location and click "Search Events" to find events in your area.</p>
             </div>
@@ -249,9 +323,33 @@ function App() {
             <div className="events-list">
               {events.map(event => (
                 <div key={event.id} className="event-card">
-                  <h3>{event.name}</h3>
-                  <p className="event-location">📍 {event.location}</p>
-                  <p className="event-date">📅 {event.date}</p>
+                  {event.image && (
+                    <img src={event.image} alt={event.name} className="event-image" />
+                  )}
+                  <div className="event-content">
+                    <h3>{event.name}</h3>
+                    {event.venue && (
+                      <p className="event-venue">🏢 {event.venue}</p>
+                    )}
+                    {event.location && (
+                      <p className="event-location">📍 {event.location}</p>
+                    )}
+                    <p className="event-date">
+                      📅 {event.date}
+                      {event.time && ` at ${event.time}`}
+                    </p>
+                    {event.priceRange && event.priceRange.min !== undefined && (
+                      <p className="event-price">
+                        💵 {event.priceRange.currency || 'USD'} ${event.priceRange.min}
+                        {event.priceRange.max && event.priceRange.max !== event.priceRange.min && ` - $${event.priceRange.max}`}
+                      </p>
+                    )}
+                    {event.url && (
+                      <a href={event.url} target="_blank" rel="noopener noreferrer" className="event-link">
+                        View on Ticketmaster →
+                      </a>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
