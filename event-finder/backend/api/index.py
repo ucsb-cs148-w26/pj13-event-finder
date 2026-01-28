@@ -1,11 +1,19 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from .ticketmaster import TicketmasterService
 
 app = FastAPI()
 
-@app.get("/")
-def read_root():
-    return {"Hello": "World", "Platform": "Vercel"}
+tm_service = TicketmasterService()
 
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: str = None):
-    return {"item_id": item_id, "q": q}
+@app.get("/api/events")
+async def get_events(location: str, date: str):
+    try:
+        events = await tm_service.search_events(city=location, date_str=date)
+        
+        if not events:
+            return {"message": "No events found for this location/date", "data": []}
+            
+        return {"data": events}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
