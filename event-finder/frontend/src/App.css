@@ -72,6 +72,7 @@
 
 .form-section input[type="text"]:focus,
 .form-section input[type="datetime-local"]:focus,
+.form-section input[type="number"]:focus,
 .form-section select:focus {
   outline: none;
   border-color: #667eea;
@@ -87,17 +88,75 @@
   margin-top: 1rem;
 }
 
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
 .checkbox-label {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   cursor: pointer;
   font-weight: normal;
+  padding: 0.25rem 0;
+  color: #333;
+}
+
+.checkbox-label:hover {
+  color: #667eea;
 }
 
 .checkbox-label input[type="checkbox"] {
   width: auto;
   cursor: pointer;
+  accent-color: #667eea;
+}
+
+.price-range-inputs {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+}
+
+.price-input-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.price-input-group label {
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.price-input-group input[type="number"] {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.3s;
+}
+
+.price-input-group input[type="number"]:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.price-range-separator {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 0.5rem;
+  align-self: flex-end;
 }
 
 .filters-toggle {
@@ -155,6 +214,16 @@
   transform: translateY(0);
 }
 
+.search-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.search-button:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
 .results-section {
   background: white;
   padding: 2rem;
@@ -174,6 +243,26 @@
   color: #666;
 }
 
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: #667eea;
+  font-size: 1.1rem;
+}
+
+.error-message {
+  background-color: #fee;
+  border: 2px solid #fcc;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  color: #c33;
+}
+
+.error-message p {
+  margin: 0;
+}
+
 .events-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -182,10 +271,12 @@
 
 .event-card {
   background: #f8f9fa;
-  padding: 1.5rem;
   border-radius: 8px;
   border: 2px solid #e0e0e0;
   transition: all 0.3s;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .event-card:hover {
@@ -194,17 +285,44 @@
   transform: translateY(-2px);
 }
 
+.event-image {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  background-color: #e0e0e0;
+}
+
+.event-content {
+  padding: 1.5rem;
+}
+
 .event-card h3 {
   margin: 0 0 0.75rem 0;
   color: #333;
   font-size: 1.3rem;
 }
 
+.event-venue,
 .event-location,
-.event-date {
+.event-date,
+.event-price {
   margin: 0.5rem 0;
   color: #666;
   font-size: 0.95rem;
+}
+
+.event-link {
+  display: inline-block;
+  margin-top: 1rem;
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s;
+}
+
+.event-link:hover {
+  color: #764ba2;
+  text-decoration: underline;
 }
 
 .app-footer {
