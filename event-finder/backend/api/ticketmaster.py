@@ -1,54 +1,146 @@
 import os
-import httpx
-
+import requests
+from typing import Optional, Dict, List, Any
 from dotenv import load_dotenv
-  # This finds the .env file and loads it
 
-class TicketmasterService:
-    BASE_URL = "https://app.ticketmaster.com/discovery/v2/events.json"
+load_dotenv()
 
-    def __init__(self):
-        load_dotenv()
-        self.api_key = os.environ.get("TICKETMASTER_API_KEY")
-        if not self.api_key:
-            raise ValueError("TICKETMASTER_API_KEY is not set in environment variables")
+TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
+TICKETMASTER_BASE_URL = "https://app.ticketmaster.com/discovery/v2"
 
-    async def search_events(self, city: str, date_str: str):
-        formatted_date = f"{date_str}T00:00:00Z"
-
-        params = {
-            "apikey": self.api_key,
-            "city": city,
-            "startDateTime": formatted_date,
-            "sort": "date,asc",
-            "size": 10
+def fetch_events(
+    location: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    event_type: Optional[str] = None,
+    category: Optional[str] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None
+) -> Dict[str, Any]:
+    """
+    Service function to query Ticketmaster API and format the results.
+    """
+    
+    if not TICKETMASTER_API_KEY:
+        return {
+            "error": "Ticketmaster API key not configured",
+            "events": []
         }
-
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(self.BASE_URL, params=params)
-                response.raise_for_status()
-                data = response.json()
-                
-                return self._parse_events(data)
-                
-            except httpx.HTTPError as e:
-                print(f"Ticketmaster API Error: {e}")
-                raise e
-
-    def _parse_events(self, data):
-        clean_events = []
+    
+    params = {
+        "apikey": TICKETMASTER_API_KEY,
+        "size": 50,
+    }
+    
+    if location:
+        params["city"] = location
+    
+    if start_date:
+        if 'T' in start_date:
+            params["startDateTime"] = start_date + ":00Z"
+        else:
+            params["startDateTime"] = start_date + "T00:00:00Z"
+            
+    if end_date:
+        if 'T' in end_date:
+            params["endDateTime"] = end_date + ":00Z"
+        else:
+            params["endDateTime"] = end_date + "T23:59:59Z"
+    
+    classifications = []
+    if event_type:
+        type_mapping = {
+            "concert": "KZFzniwnSyZfZ7v7nJ",
+            "sports": "KZFzniwnSyZfZ7v7nE",
+            "theater": "KZFzniwnSyZfZ7v7na",
+            "festival": "KZFzniwnSyZfZ7v7n1",
+            "conference": "KZFzniwnSyZfZ7v7n1",
+            "workshop": "KZFzniwnSyZfZ7v7n1",
+        }
+        if event_type in type_mapping:
+            classifications.append(type_mapping[event_type])
+    
+    if category:
+        category_mapping = {
+            "music": "KZFzniwnSyZfZ7v7nJ",
+            "arts": "KZFzniwnSyZfZ7v7na",
+            "food": "KZFzniwnSyZfZ7v7n1",
+            "outdoor": "KZFzniwnSyZfZ7v7n1",
+            "family": "KZFzniwnSyZfZ7v7n1",
+        }
+        if category in category_mapping:
+            classifications.append(category_mapping[category])
+    
+    if classifications:
+        params["classificationId"] = ",".join(classifications)
+    
+    try:
+        response = requests.get(f"{TICKETMASTER_BASE_URL}/events.json", params=params)
+        print(f"Querying URL: {response.url}")
+        response.raise_for_status()
+        data = response.json()
         
+        events = []
+        seen_names = set()
         if "_embedded" in data and "events" in data["_embedded"]:
             for event in data["_embedded"]["events"]:
-                venue_info = event.get("_embedded", {}).get("venues", [{}])[0]
+                event_info = {
+                    "id": event.get("id", ""),
+                    "name": event.get("name", "Unknown Event"),
+                    "url": event.get("url", ""),
+                    "date": event.get("dates", {}).get("start", {}).get("localDate", "TBD"),
+                    "time": event.get("dates", {}).get("start", {}).get("localTime", ""),
+                    "location": "",
+                    "venue": "",
+                    "image": "",
+                    "priceRange": {}
+                }
                 
-                clean_events.append({
-                    "name": event.get("name"),
-                    "url": event.get("url"),
-                    "date": event.get("dates", {}).get("start", {}).get("localDate"),
-                    "venue": venue_info.get("name", "TBA"),
-                    "city": venue_info.get("city", {}).get("name", "Unknown")
-                })
+                if "_embedded" in event and "venues" in event["_embedded"]:
+                    venue = event["_embedded"]["venues"][0]
+                    event_info["venue"] = venue.get("name", "")
+                    address = venue.get("address", {})
+                    city = venue.get("city", {}).get("name", "")
+                    state = venue.get("state", {}).get("stateCode", "")
+                    event_info["location"] = f"{city}, {state}"
                 
-        return clean_events
+                if "images" in event and len(event["images"]) > 0:
+                    event_info["image"] = event["images"][0].get("url", "")
+                
+                if "priceRanges" in event and len(event["priceRanges"]) > 0:
+                    price_range = event["priceRanges"][0]
+                    event_info["priceRange"] = {
+                        "min": price_range.get("min", 0),
+                        "max": price_range.get("max", 0),
+                        "currency": price_range.get("currency", "USD")
+                    }
+                
+                if min_price is not None or max_price is not None:
+                    if event_info["priceRange"]:
+                        event_min = event_info["priceRange"].get("min", 0)
+                        event_max = event_info["priceRange"].get("max", float('inf'))
+                        if min_price is not None and event_max < min_price:
+                            continue
+                        if max_price is not None and event_min > max_price:
+                            continue
+                
+                if event_info["name"] in seen_names:
+                    continue
+                seen_names.add(event_info["name"])
+                events.append(event_info)
+        
+        return {
+            "events": events,
+            "total": len(events)
+        }
+    
+    except requests.exceptions.RequestException as e:
+        return {
+            "error": f"Failed to fetch events: {str(e)}",
+            "events": []
+        }
+    except Exception as e:
+        return {
+            "error": f"An error occurred: {str(e)}",
+            "events": []
+        }
