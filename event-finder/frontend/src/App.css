@@ -70,6 +70,65 @@
   transition: border-color 0.3s;
 }
 
+.typeahead {
+  position: relative;
+}
+
+.location-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.sub-label {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 600;
+}
+
+.typeahead-results {
+  list-style: none;
+  margin: 0.5rem 0 0 0;
+  padding: 0;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 50;
+  background: #fff;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  max-height: 260px;
+  overflow: auto;
+}
+
+.typeahead-results li {
+  padding: 0.75rem 0.9rem;
+  cursor: pointer;
+  color: #333;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.typeahead-results li:last-child {
+  border-bottom: none;
+}
+
+.typeahead-results li:hover {
+  background: #f6f7ff;
+}
+
+.typeahead-status {
+  margin-top: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  background: #fff;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  color: #666;
+  font-size: 0.95rem;
+}
+
 .form-section input[type="text"]:focus,
 .form-section input[type="datetime-local"]:focus,
 .form-section input[type="number"]:focus,
@@ -347,6 +406,10 @@
   }
 
   .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .location-grid {
     grid-template-columns: 1fr;
   }
 

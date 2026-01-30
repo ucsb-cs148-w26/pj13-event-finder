@@ -1,8 +1,82 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import './App.css';
 
 function App() {
-  const [location, setLocation] = useState('');
+  const US_STATES = [
+    'Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware',
+    'Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana',
+    'Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana',
+    'Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina',
+    'North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina',
+    'South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia',
+    'Wisconsin','Wyoming'
+  ];
+
+  // Simplified city database for typeahead. Extend this as needed.
+  const CITIES_BY_STATE = {
+    Alabama: ['Birmingham', 'Montgomery', 'Mobile', 'Huntsville', 'Tuscaloosa'],
+    Alaska: ['Anchorage', 'Fairbanks', 'Juneau'],
+    Arizona: ['Phoenix', 'Tucson', 'Mesa', 'Chandler', 'Scottsdale'],
+    Arkansas: ['Little Rock', 'Fayetteville', 'Fort Smith'],
+    California: [
+      'Los Angeles', 'San Diego', 'San Jose', 'San Francisco', 'Fresno',
+      'Sacramento', 'Long Beach', 'Oakland', 'Bakersfield', 'Anaheim'
+    ],
+    Colorado: ['Denver', 'Colorado Springs', 'Aurora', 'Fort Collins', 'Boulder'],
+    Connecticut: ['Bridgeport', 'New Haven', 'Stamford', 'Hartford'],
+    Delaware: ['Wilmington', 'Dover', 'Newark'],
+    Florida: ['Jacksonville', 'Miami', 'Tampa', 'Orlando', 'St. Petersburg'],
+    Georgia: ['Atlanta', 'Augusta', 'Columbus', 'Savannah', 'Athens'],
+    Hawaii: ['Honolulu', 'Hilo'],
+    Idaho: ['Boise', 'Meridian', 'Nampa'],
+    Illinois: ['Chicago', 'Aurora', 'Naperville', 'Joliet', 'Springfield'],
+    Indiana: ['Indianapolis', 'Fort Wayne', 'Evansville', 'South Bend'],
+    Iowa: ['Des Moines', 'Cedar Rapids', 'Davenport'],
+    Kansas: ['Wichita', 'Overland Park', 'Kansas City', 'Topeka'],
+    Kentucky: ['Louisville', 'Lexington', 'Bowling Green'],
+    Louisiana: ['New Orleans', 'Baton Rouge', 'Shreveport', 'Lafayette'],
+    Maine: ['Portland', 'Lewiston', 'Bangor'],
+    Maryland: ['Baltimore', 'Annapolis', 'Frederick'],
+    Massachusetts: ['Boston', 'Worcester', 'Springfield', 'Cambridge', 'Lowell'],
+    Michigan: ['Detroit', 'Grand Rapids', 'Warren', 'Ann Arbor', 'Lansing'],
+    Minnesota: ['Minneapolis', 'Saint Paul', 'Rochester', 'Duluth'],
+    Mississippi: ['Jackson', 'Gulfport', 'Biloxi'],
+    Missouri: ['Kansas City', 'St. Louis', 'Springfield', 'Columbia'],
+    Montana: ['Billings', 'Missoula', 'Bozeman'],
+    Nebraska: ['Omaha', 'Lincoln', 'Bellevue'],
+    Nevada: ['Las Vegas', 'Reno', 'Henderson', 'Carson City'],
+    'New Hampshire': ['Manchester', 'Nashua', 'Concord'],
+    'New Jersey': ['Newark', 'Jersey City', 'Paterson', 'Trenton'],
+    'New Mexico': ['Albuquerque', 'Santa Fe', 'Las Cruces'],
+    'New York': ['New York', 'Buffalo', 'Rochester', 'Yonkers', 'Syracuse', 'Albany'],
+    'North Carolina': ['Charlotte', 'Raleigh', 'Greensboro', 'Durham', 'Winston-Salem'],
+    'North Dakota': ['Fargo', 'Bismarck', 'Grand Forks'],
+    Ohio: ['Columbus', 'Cleveland', 'Cincinnati', 'Toledo', 'Akron'],
+    Oklahoma: ['Oklahoma City', 'Tulsa', 'Norman'],
+    Oregon: ['Portland', 'Eugene', 'Salem', 'Gresham'],
+    Pennsylvania: ['Philadelphia', 'Pittsburgh', 'Allentown', 'Erie'],
+    'Rhode Island': ['Providence', 'Warwick', 'Cranston'],
+    'South Carolina': ['Columbia', 'Charleston', 'Greenville'],
+    'South Dakota': ['Sioux Falls', 'Rapid City'],
+    Tennessee: ['Nashville', 'Memphis', 'Knoxville', 'Chattanooga'],
+    Texas: ['Houston', 'San Antonio', 'Dallas', 'Austin', 'Fort Worth', 'El Paso'],
+    Utah: ['Salt Lake City', 'West Valley City', 'Provo'],
+    Vermont: ['Burlington', 'Montpelier'],
+    Virginia: ['Virginia Beach', 'Norfolk', 'Richmond', 'Arlington'],
+    Washington: ['Seattle', 'Spokane', 'Tacoma', 'Vancouver'],
+    'West Virginia': ['Charleston', 'Huntington', 'Morgantown'],
+    Wisconsin: ['Milwaukee', 'Madison', 'Green Bay'],
+    Wyoming: ['Cheyenne', 'Casper']
+  };
+
+  const [stateQuery, setStateQuery] = useState('');
+  const [stateResults, setStateResults] = useState([]);
+  const [selectedState, setSelectedState] = useState('');
+  const [showStateTypeahead, setShowStateTypeahead] = useState(false);
+
+  const [cityQuery, setCityQuery] = useState('');
+  const [cityResults, setCityResults] = useState([]);
+  const [showCityTypeahead, setShowCityTypeahead] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [usePreciseLocation, setUsePreciseLocation] = useState(false);
@@ -17,6 +91,35 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    const q = stateQuery.trim();
+    if (q.length < 1) {
+      setStateResults([]);
+      return;
+    }
+
+    const lowered = q.toLowerCase();
+    const filtered = US_STATES.filter(s => s.toLowerCase().includes(lowered)).slice(0, 10);
+    setStateResults(filtered);
+  }, [stateQuery]);
+
+  useEffect(() => {
+    if (!selectedState) return;
+    const allCities = CITIES_BY_STATE[selectedState] || [];
+    const q = cityQuery.trim().toLowerCase();
+
+    if (!q) {
+      setCityResults(allCities.slice(0, 10));
+      return;
+    }
+
+    const filtered = allCities
+      .filter((name) => name.toLowerCase().startsWith(q))
+      .slice(0, 10);
+
+    setCityResults(filtered);
+  }, [cityQuery, selectedState]);
+
   const handleSearch = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -26,7 +129,7 @@ function App() {
     try {
       // Build query parameters
       const params = new URLSearchParams();
-      params.append('location', location);
+      params.append('location', `${cityQuery}, ${selectedState}`);
       
       // Auto-fill default times if user only entered dates
       let processedStartDate = startDate;
@@ -139,15 +242,96 @@ function App() {
       <main className="main-content">
         <form className="search-form" onSubmit={handleSearch}>
           <div className="form-section">
-            <label htmlFor="location">Location *</label>
-            <input
-              type="text"
-              id="location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="Enter city, address, or area"
-              required
-            />
+            <label>Location *</label>
+
+            <div className="location-grid">
+              <div className="typeahead">
+                <label className="sub-label" htmlFor="state">State</label>
+                <input
+                  type="text"
+                  id="state"
+                  value={stateQuery}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setStateQuery(next);
+                    setSelectedState('');
+                    setCityQuery('');
+                    setCityResults([]);
+                    setShowStateTypeahead(true);
+                  }}
+                  onFocus={() => setShowStateTypeahead(true)}
+                  onBlur={() => window.setTimeout(() => setShowStateTypeahead(false), 150)}
+                  placeholder="Start typing a state (e.g., California)"
+                  autoComplete="off"
+                  required
+                />
+
+                {showStateTypeahead && stateResults.length > 0 && (
+                  <ul className="typeahead-results" role="listbox" aria-label="State suggestions">
+                    {stateResults.map(state => (
+                      <li
+                        key={state}
+                        role="option"
+                        tabIndex={-1}
+                        onMouseDown={() => {
+                          setSelectedState(state);
+                          setStateQuery(state);
+                          setShowStateTypeahead(false);
+                          setCityQuery('');
+                          setCityResults([]);
+                        }}
+                      >
+                        {state}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="typeahead">
+                <label className="sub-label" htmlFor="city">City</label>
+                <input
+                  type="text"
+                  id="city"
+                  value={cityQuery}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setCityQuery(next);
+                    setShowCityTypeahead(true);
+                    if (next.length < 1) setCityResults([]);
+                  }}
+                  onFocus={() => setShowCityTypeahead(true)}
+                  onBlur={() => window.setTimeout(() => setShowCityTypeahead(false), 150)}
+                  placeholder={selectedState ? `Start typing a city in ${selectedState}` : 'Select a state first'}
+                  autoComplete="off"
+                  disabled={!selectedState}
+                  required
+                />
+
+                {showCityTypeahead && cityQuery.length >= 1 && cityResults.length === 0 && (
+                  <div className="typeahead-status">No matching cities found.</div>
+                )}
+
+                {showCityTypeahead && cityResults.length > 0 && (
+                  <ul className="typeahead-results" role="listbox" aria-label="City suggestions">
+                    {cityResults.map(cityName => (
+                      <li
+                        key={`${selectedState}-${cityName}`}
+                        role="option"
+                        tabIndex={-1}
+                        onMouseDown={() => {
+                          setCityQuery(cityName);
+                          setCityResults([]);
+                          setShowCityTypeahead(false);
+                        }}
+                      >
+                        {`${cityName}, ${selectedState}`}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="form-row">
