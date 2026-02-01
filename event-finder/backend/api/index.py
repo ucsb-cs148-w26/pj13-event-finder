@@ -10,7 +10,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://pj13-event-finder-2j74.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
