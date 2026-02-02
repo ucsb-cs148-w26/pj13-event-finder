@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import './App.css';
 
 function App() {
@@ -70,12 +70,10 @@ function App() {
   };
 
   const [stateQuery, setStateQuery] = useState('');
-  const [stateResults, setStateResults] = useState([]);
   const [selectedState, setSelectedState] = useState('');
   const [showStateTypeahead, setShowStateTypeahead] = useState(false);
 
   const [cityQuery, setCityQuery] = useState('');
-  const [cityResults, setCityResults] = useState([]);
   const [showCityTypeahead, setShowCityTypeahead] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -91,34 +89,33 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  // Compute state results directly from stateQuery
+  const getStateResults = () => {
     const q = stateQuery.trim();
     if (q.length < 1) {
-      setStateResults([]);
-      return;
+      return [];
     }
-
     const lowered = q.toLowerCase();
-    const filtered = US_STATES.filter(s => s.toLowerCase().includes(lowered)).slice(0, 10);
-    setStateResults(filtered);
-  }, [stateQuery]);
+    return US_STATES.filter(s => s.toLowerCase().includes(lowered)).slice(0, 10);
+  };
 
-  useEffect(() => {
-    if (!selectedState) return;
+  // Compute city results directly from cityQuery and selectedState
+  const getCityResults = () => {
+    if (!selectedState) return [];
     const allCities = CITIES_BY_STATE[selectedState] || [];
     const q = cityQuery.trim().toLowerCase();
 
     if (!q) {
-      setCityResults(allCities.slice(0, 10));
-      return;
+      return allCities.slice(0, 10);
     }
 
-    const filtered = allCities
+    return allCities
       .filter((name) => name.toLowerCase().startsWith(q))
       .slice(0, 10);
+  };
 
-    setCityResults(filtered);
-  }, [cityQuery, selectedState]);
+  const stateResults = getStateResults();
+  const cityResults = getCityResults();
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -129,7 +126,18 @@ function App() {
     try {
       // Build query parameters
       const params = new URLSearchParams();
-      params.append('location', `${cityQuery}, ${selectedState}`);
+      // Combine city and state into location string format: "City, State"
+      const locationString = cityQuery && selectedState 
+        ? `${cityQuery}, ${selectedState}` 
+        : cityQuery || selectedState || '';
+      
+      if (!locationString) {
+        setError('Please select a city and state');
+        setLoading(false);
+        return;
+      }
+      
+      params.append('location', locationString);
       
       // Auto-fill default times if user only entered dates
       let processedStartDate = startDate;
@@ -178,11 +186,18 @@ function App() {
       }
 
       // Call backend API
-      // For local development, set REACT_APP_BACKEND_URL=http://localhost:8000 in .env
-      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'https://pj13-event-finder-backend.vercel.app';
+      // For local development, use http://localhost:8000 or your backend URL
+      // For production, set REACT_APP_BACKEND_URL=https://pj13-event-finder-backend.vercel.app in .env
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
       const apiUrl = `${backendUrl}/api/events?${params.toString()}`;
       console.log('API URL:', apiUrl);
+      
       const response = await fetch(apiUrl);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
 
       if (data.error) {
@@ -256,7 +271,6 @@ function App() {
                     setStateQuery(next);
                     setSelectedState('');
                     setCityQuery('');
-                    setCityResults([]);
                     setShowStateTypeahead(true);
                   }}
                   onFocus={() => setShowStateTypeahead(true)}
@@ -278,7 +292,6 @@ function App() {
                           setStateQuery(state);
                           setShowStateTypeahead(false);
                           setCityQuery('');
-                          setCityResults([]);
                         }}
                       >
                         {state}
@@ -298,7 +311,6 @@ function App() {
                     const next = e.target.value;
                     setCityQuery(next);
                     setShowCityTypeahead(true);
-                    if (next.length < 1) setCityResults([]);
                   }}
                   onFocus={() => setShowCityTypeahead(true)}
                   onBlur={() => window.setTimeout(() => setShowCityTypeahead(false), 150)}
@@ -321,7 +333,6 @@ function App() {
                         tabIndex={-1}
                         onMouseDown={() => {
                           setCityQuery(cityName);
-                          setCityResults([]);
                           setShowCityTypeahead(false);
                         }}
                       >
