@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import './App.css';
+import citiesData from './cities.json';
 
 function App() {
   const US_STATES = [
@@ -12,62 +13,8 @@ function App() {
     'Wisconsin','Wyoming'
   ];
 
-  // Simplified city database for typeahead. Extend this as needed.
-  const CITIES_BY_STATE = {
-    Alabama: ['Birmingham', 'Montgomery', 'Mobile', 'Huntsville', 'Tuscaloosa'],
-    Alaska: ['Anchorage', 'Fairbanks', 'Juneau'],
-    Arizona: ['Phoenix', 'Tucson', 'Mesa', 'Chandler', 'Scottsdale'],
-    Arkansas: ['Little Rock', 'Fayetteville', 'Fort Smith'],
-    California: [
-      'Los Angeles', 'San Diego', 'San Jose', 'San Francisco', 'Fresno',
-      'Sacramento', 'Long Beach', 'Oakland', 'Bakersfield', 'Anaheim'
-    ],
-    Colorado: ['Denver', 'Colorado Springs', 'Aurora', 'Fort Collins', 'Boulder'],
-    Connecticut: ['Bridgeport', 'New Haven', 'Stamford', 'Hartford'],
-    Delaware: ['Wilmington', 'Dover', 'Newark'],
-    Florida: ['Jacksonville', 'Miami', 'Tampa', 'Orlando', 'St. Petersburg'],
-    Georgia: ['Atlanta', 'Augusta', 'Columbus', 'Savannah', 'Athens'],
-    Hawaii: ['Honolulu', 'Hilo'],
-    Idaho: ['Boise', 'Meridian', 'Nampa'],
-    Illinois: ['Chicago', 'Aurora', 'Naperville', 'Joliet', 'Springfield'],
-    Indiana: ['Indianapolis', 'Fort Wayne', 'Evansville', 'South Bend'],
-    Iowa: ['Des Moines', 'Cedar Rapids', 'Davenport'],
-    Kansas: ['Wichita', 'Overland Park', 'Kansas City', 'Topeka'],
-    Kentucky: ['Louisville', 'Lexington', 'Bowling Green'],
-    Louisiana: ['New Orleans', 'Baton Rouge', 'Shreveport', 'Lafayette'],
-    Maine: ['Portland', 'Lewiston', 'Bangor'],
-    Maryland: ['Baltimore', 'Annapolis', 'Frederick'],
-    Massachusetts: ['Boston', 'Worcester', 'Springfield', 'Cambridge', 'Lowell'],
-    Michigan: ['Detroit', 'Grand Rapids', 'Warren', 'Ann Arbor', 'Lansing'],
-    Minnesota: ['Minneapolis', 'Saint Paul', 'Rochester', 'Duluth'],
-    Mississippi: ['Jackson', 'Gulfport', 'Biloxi'],
-    Missouri: ['Kansas City', 'St. Louis', 'Springfield', 'Columbia'],
-    Montana: ['Billings', 'Missoula', 'Bozeman'],
-    Nebraska: ['Omaha', 'Lincoln', 'Bellevue'],
-    Nevada: ['Las Vegas', 'Reno', 'Henderson', 'Carson City'],
-    'New Hampshire': ['Manchester', 'Nashua', 'Concord'],
-    'New Jersey': ['Newark', 'Jersey City', 'Paterson', 'Trenton'],
-    'New Mexico': ['Albuquerque', 'Santa Fe', 'Las Cruces'],
-    'New York': ['New York', 'Buffalo', 'Rochester', 'Yonkers', 'Syracuse', 'Albany'],
-    'North Carolina': ['Charlotte', 'Raleigh', 'Greensboro', 'Durham', 'Winston-Salem'],
-    'North Dakota': ['Fargo', 'Bismarck', 'Grand Forks'],
-    Ohio: ['Columbus', 'Cleveland', 'Cincinnati', 'Toledo', 'Akron'],
-    Oklahoma: ['Oklahoma City', 'Tulsa', 'Norman'],
-    Oregon: ['Portland', 'Eugene', 'Salem', 'Gresham'],
-    Pennsylvania: ['Philadelphia', 'Pittsburgh', 'Allentown', 'Erie'],
-    'Rhode Island': ['Providence', 'Warwick', 'Cranston'],
-    'South Carolina': ['Columbia', 'Charleston', 'Greenville'],
-    'South Dakota': ['Sioux Falls', 'Rapid City'],
-    Tennessee: ['Nashville', 'Memphis', 'Knoxville', 'Chattanooga'],
-    Texas: ['Houston', 'San Antonio', 'Dallas', 'Austin', 'Fort Worth', 'El Paso'],
-    Utah: ['Salt Lake City', 'West Valley City', 'Provo'],
-    Vermont: ['Burlington', 'Montpelier'],
-    Virginia: ['Virginia Beach', 'Norfolk', 'Richmond', 'Arlington'],
-    Washington: ['Seattle', 'Spokane', 'Tacoma', 'Vancouver'],
-    'West Virginia': ['Charleston', 'Huntington', 'Morgantown'],
-    Wisconsin: ['Milwaukee', 'Madison', 'Green Bay'],
-    Wyoming: ['Cheyenne', 'Casper']
-  };
+  // Import comprehensive city database from JSON file
+  const CITIES_BY_STATE = citiesData;
 
   const [stateQuery, setStateQuery] = useState('');
   const [selectedState, setSelectedState] = useState('');
