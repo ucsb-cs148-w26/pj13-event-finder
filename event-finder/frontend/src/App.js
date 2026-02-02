@@ -178,8 +178,8 @@ function App() {
       }
 
       // Call backend API
-      // For local development, use http://localhost:8000 or your backend URL
-      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+      // For local development, set REACT_APP_BACKEND_URL=http://localhost:8000 in .env
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'https://pj13-event-finder-backend.vercel.app';
       const apiUrl = `${backendUrl}/api/events?${params.toString()}`;
       console.log('API URL:', apiUrl);
       const response = await fetch(apiUrl);
