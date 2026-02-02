@@ -181,7 +181,7 @@ function App() {
       // For local development, use http://localhost:8000 or your backend URL
       const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
       const apiUrl = `${backendUrl}/api/events?${params.toString()}`;
-      
+      console.log('API URL:', apiUrl);
       const response = await fetch(apiUrl);
       const data = await response.json();
 
