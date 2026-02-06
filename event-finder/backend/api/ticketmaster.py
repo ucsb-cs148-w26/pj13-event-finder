@@ -124,7 +124,7 @@ def fetch_events(
                         if max_price is not None and event_min > max_price:
                             continue
                 
-                if event_info["name"] in seen_names:
+                if event_info["name"] in seen_names and event_info["url"] == "":
                     continue
                 seen_names.add(event_info["name"])
                 events.append(event_info)
