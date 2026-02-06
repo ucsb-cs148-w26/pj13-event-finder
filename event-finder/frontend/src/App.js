@@ -300,6 +300,7 @@ function App() {
                 id="start-date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
+                required
               />
             </div>
 
@@ -310,6 +311,7 @@ function App() {
                 id="end-date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
+                required
               />
             </div>
           </div>
