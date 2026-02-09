@@ -30,6 +30,8 @@ def fetch_events(
     params = {
         "apikey": TICKETMASTER_API_KEY,
         "size": 50,
+        "includeSpellcheck": "yes"
+        
     }
     
     if location:
@@ -89,6 +91,7 @@ def fetch_events(
                     "name": event.get("name", "Unknown Event"),
                     "url": event.get("url", ""),
                     "date": event.get("dates", {}).get("start", {}).get("localDate", "TBD"),
+                    "status": event.get("dates", {}).get("status", {}).get("code", "unknown"),
                     "time": event.get("dates", {}).get("start", {}).get("localTime", ""),
                     "location": "",
                     "venue": "",
@@ -124,8 +127,9 @@ def fetch_events(
                         if max_price is not None and event_min > max_price:
                             continue
                 
-                if event_info["name"] in seen_names:
+                if event_info["name"] in seen_names or event_info["url"] == "" or event_info["status"] != "onsale":
                     continue
+                print(f"Adding event: {event_info['name']}")
                 seen_names.add(event_info["name"])
                 events.append(event_info)
         
