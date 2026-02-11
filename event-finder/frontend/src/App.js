@@ -35,6 +35,18 @@ function App() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Popular cities for quick selection
+  const popularCities = [
+    { city: 'New York', state: 'New York' },
+    { city: 'Los Angeles', state: 'California' },
+    { city: 'Chicago', state: 'Illinois' },
+    { city: 'Houston', state: 'Texas' },
+    { city: 'Phoenix', state: 'Arizona' },
+    { city: 'Philadelphia', state: 'Pennsylvania' },
+    { city: 'San Antonio', state: 'Texas' },
+    { city: 'San Diego', state: 'California' }
+  ];
 
   // Compute state results directly from stateQuery
   const getStateResults = () => {
@@ -194,302 +206,345 @@ function App() {
     });
   };
 
+  const handlePopularCityClick = (city, state) => {
+    setSelectedState(state);
+    setStateQuery(state);
+    setCityQuery(city);
+    setShowStateTypeahead(false);
+    setShowCityTypeahead(false);
+  };
+
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <h1>Event Finder</h1>
-        <p className="subtitle">Discover events in your area with the click of a button</p>
+    <div
+      className="min-h-screen flex flex-col app-bg"
+      style={{ backgroundImage: "url('/background.jpeg')" }}
+    >
+      <header className="bg-white/95 backdrop-blur-sm shadow-md py-8 px-4 text-center">
+        <h1 className="m-0 text-gray-800 text-4xl font-bold">Event Finder</h1>
+        <p className="mt-2 mb-0 text-gray-600 text-lg">Discover events in your area with the click of a button</p>
       </header>
 
-      <main className="main-content">
-        <form className="search-form" onSubmit={handleSearch}>
-          <div className="form-section">
-            <label>Location *</label>
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 flex flex-col gap-6">
+        <form className="w-full max-w-6xl mx-auto" onSubmit={handleSearch}>
+          {/* Glassmorphic Search Card */}
+          <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
+            <div className="flex flex-col lg:flex-row gap-4 items-end">
+              {/* Location Group */}
+              <div className="flex-1 w-full">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Location *</label>
+                <div className="flex gap-2">
+                  {/* State Input */}
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      id="state"
+                      value={stateQuery}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setStateQuery(next);
+                        setSelectedState('');
+                        setCityQuery('');
+                        setShowStateTypeahead(true);
+                      }}
+                      onFocus={() => setShowStateTypeahead(true)}
+                      onBlur={() => window.setTimeout(() => setShowStateTypeahead(false), 150)}
+                      placeholder="Start typing a state (e.g., California)"
+                      autoComplete="off"
+                      required
+                      className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
+                    />
+                    {showStateTypeahead && stateResults.length > 0 && (
+                      <ul className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {stateResults.map(state => (
+                          <li
+                            key={state}
+                            onMouseDown={() => {
+                              setSelectedState(state);
+                              setStateQuery(state);
+                              setShowStateTypeahead(false);
+                              setCityQuery('');
+                            }}
+                            className="px-4 py-2 hover:bg-purple-50 cursor-pointer text-gray-700"
+                          >
+                            {state}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
 
-            <div className="location-grid">
-              <div className="typeahead">
-                <label className="sub-label" htmlFor="state">State</label>
-                <input
-                  type="text"
-                  id="state"
-                  value={stateQuery}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setStateQuery(next);
-                    setSelectedState('');
-                    setCityQuery('');
-                    setShowStateTypeahead(true);
-                  }}
-                  onFocus={() => setShowStateTypeahead(true)}
-                  onBlur={() => window.setTimeout(() => setShowStateTypeahead(false), 150)}
-                  placeholder="Start typing a state (e.g., California)"
-                  autoComplete="off"
-                  required
-                />
-
-                {showStateTypeahead && stateResults.length > 0 && (
-                  <ul className="typeahead-results" role="listbox" aria-label="State suggestions">
-                    {stateResults.map(state => (
-                      <li
-                        key={state}
-                        role="option"
-                        tabIndex={-1}
-                        onMouseDown={() => {
-                          setSelectedState(state);
-                          setStateQuery(state);
-                          setShowStateTypeahead(false);
-                          setCityQuery('');
-                        }}
-                      >
-                        {state}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                  {/* City Input */}
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      id="city"
+                      value={cityQuery}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setCityQuery(next);
+                        setShowCityTypeahead(true);
+                      }}
+                      onFocus={() => setShowCityTypeahead(true)}
+                      onBlur={() => window.setTimeout(() => setShowCityTypeahead(false), 150)}
+                      placeholder={selectedState ? `City in ${selectedState}` : 'Select state first'}
+                      autoComplete="off"
+                      disabled={!selectedState}
+                      required
+                      className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:bg-gray-100 disabled:cursor-not-allowed font-medium"
+                    />
+                    {showCityTypeahead && cityQuery.length >= 1 && cityResults.length === 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg px-4 py-2 text-gray-500 text-sm">
+                        No matching cities found.
+                      </div>
+                    )}
+                    {showCityTypeahead && cityResults.length > 0 && (
+                      <ul className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {cityResults.map(cityName => (
+                          <li
+                            key={`${selectedState}-${cityName}`}
+                            onMouseDown={() => {
+                              setCityQuery(cityName);
+                              setShowCityTypeahead(false);
+                            }}
+                            className="px-4 py-2 hover:bg-purple-50 cursor-pointer text-gray-700"
+                          >
+                            {`${cityName}, ${selectedState}`}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="typeahead">
-                <label className="sub-label" htmlFor="city">City</label>
-                <input
-                  type="text"
-                  id="city"
-                  value={cityQuery}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setCityQuery(next);
-                    setShowCityTypeahead(true);
-                  }}
-                  onFocus={() => setShowCityTypeahead(true)}
-                  onBlur={() => window.setTimeout(() => setShowCityTypeahead(false), 150)}
-                  placeholder={selectedState ? `Start typing a city in ${selectedState}` : 'Select a state first'}
-                  autoComplete="off"
-                  disabled={!selectedState}
-                  required
-                />
-
-                {showCityTypeahead && cityQuery.length >= 1 && cityResults.length === 0 && (
-                  <div className="typeahead-status">No matching cities found.</div>
-                )}
-
-                {showCityTypeahead && cityResults.length > 0 && (
-                  <ul className="typeahead-results" role="listbox" aria-label="City suggestions">
-                    {cityResults.map(cityName => (
-                      <li
-                        key={`${selectedState}-${cityName}`}
-                        role="option"
-                        tabIndex={-1}
-                        onMouseDown={() => {
-                          setCityQuery(cityName);
-                          setShowCityTypeahead(false);
-                        }}
-                      >
-                        {`${cityName}, ${selectedState}`}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              {/* Date Range */}
+              <div className="flex flex-col sm:flex-row gap-2 flex-1 w-full">
+                <div className="flex-1">
+                  <label htmlFor="start-date" className="block text-sm font-semibold text-gray-700 mb-2">Start Date</label>
+                  <input
+                    type="datetime-local"
+                    id="start-date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    required
+                    className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label htmlFor="end-date" className="block text-sm font-semibold text-gray-700 mb-2">End Date</label>
+                  <input
+                    type="datetime-local"
+                    id="end-date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    required
+                    className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="form-row">
-            <div className="form-section">
-              <label htmlFor="start-date">Start Date & Time</label>
-              <input
-                type="datetime-local"
-                id="start-date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                required
-              />
+            {/* Popular Cities Chips */}
+            <div className="mt-4 pt-4 border-t border-gray-200/50">
+              <p className="text-xs text-gray-500 mb-2 font-medium">Popular Cities:</p>
+              <div className="flex flex-wrap gap-2">
+                {popularCities.map((item, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handlePopularCityClick(item.city, item.state)}
+                    className="px-3 py-1 text-xs bg-white/60 hover:bg-white/80 border border-gray-200 rounded-full text-gray-700 hover:text-purple-700 transition-all font-medium"
+                  >
+                    {item.city}, {item.state}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="form-section">
-              <label htmlFor="end-date">End Date & Time</label>
-              <input
-                type="datetime-local"
-                id="end-date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                required
-              />
+            {/* Additional Options */}
+            <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={usePreciseLocation}
+                  onChange={(e) => setUsePreciseLocation(e.target.checked)}
+                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                />
+                <span className="font-medium">Use My Precise Location</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowFilters(!showFilters)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-transparent hover:bg-white/60 border border-gray-300 rounded-lg transition-all"
+              >
+                {showFilters ? 'Hide' : 'Show'} Filters
+              </button>
             </div>
-          </div>
-
-          <div className="form-section checkbox-section">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={usePreciseLocation}
-                onChange={(e) => setUsePreciseLocation(e.target.checked)}
-              />
-              Use My Precise Location
-            </label>
-          </div>
-
-          <div className="filters-toggle">
-            <button
-              type="button"
-              className="toggle-filters-btn"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              {showFilters ? 'Hide' : 'Show'} Filters
-            </button>
           </div>
 
           {showFilters && (
-            <div className="filters-section">
-              <div className="form-section">
-                <label>Event Type</label>
-                <div className="checkbox-group">
-                  {[
-                    { value: 'concert', label: 'Concert' },
-                    { value: 'sports', label: 'Sports' },
-                    { value: 'theater', label: 'Theater' },
-                    { value: 'festival', label: 'Festival' },
-                    { value: 'conference', label: 'Conference' },
-                    { value: 'workshop', label: 'Workshop' },
-                    { value: 'other', label: 'Other' }
-                  ].map(option => (
-                    <label key={option.value} className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        value={option.value}
-                        checked={filters.eventType.includes(option.value)}
-                        onChange={(e) => handleMultiSelectChange('eventType', option.value)}
-                      />
-                      {option.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="form-section">
-                <label>Category</label>
-                <div className="checkbox-group">
-                  {[
-                    { value: 'music', label: 'Music' },
-                    { value: 'arts', label: 'Arts & Culture' },
-                    { value: 'food', label: 'Food & Drink' },
-                    { value: 'outdoor', label: 'Outdoor' },
-                    { value: 'family', label: 'Family' },
-                    { value: 'networking', label: 'Networking' }
-                  ].map(option => (
-                    <label key={option.value} className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        value={option.value}
-                        checked={filters.category.includes(option.value)}
-                        onChange={(e) => handleMultiSelectChange('category', option.value)}
-                      />
-                      {option.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="form-section">
-                <label>Price Range ($)</label>
-                <div className="price-range-inputs">
-                  <div className="price-input-group">
-                    <label htmlFor="price-min">Min</label>
-                    <input
-                      type="number"
-                      id="price-min"
-                      min="0"
-                      step="0.01"
-                      value={filters.priceRange.min}
-                      onChange={(e) => handlePriceRangeChange('min', e.target.value)}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <span className="price-range-separator">-</span>
-                  <div className="price-input-group">
-                    <label htmlFor="price-max">Max</label>
-                    <input
-                      type="number"
-                      id="price-max"
-                      min="0"
-                      step="0.01"
-                      value={filters.priceRange.max}
-                      onChange={(e) => handlePriceRangeChange('max', e.target.value)}
-                      placeholder="No limit"
-                    />
+            <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Event Type</label>
+                  <div className="space-y-2">
+                    {[
+                      { value: 'concert', label: 'Concert' },
+                      { value: 'sports', label: 'Sports' },
+                      { value: 'theater', label: 'Theater' },
+                      { value: 'festival', label: 'Festival' },
+                      { value: 'conference', label: 'Conference' },
+                      { value: 'workshop', label: 'Workshop' },
+                      { value: 'other', label: 'Other' }
+                    ].map(option => (
+                      <label key={option.value} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:text-purple-700">
+                        <input
+                          type="checkbox"
+                          value={option.value}
+                          checked={filters.eventType.includes(option.value)}
+                          onChange={(e) => handleMultiSelectChange('eventType', option.value)}
+                          className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                        />
+                        <span className="font-medium">{option.label}</span>
+                      </label>
+                    ))}
                   </div>
                 </div>
-              </div>
 
-              <div className="form-section">
-                <label>Duration</label>
-                <div className="checkbox-group">
-                  {[
-                    { value: 'short', label: 'Less than 2 hours' },
-                    { value: 'medium', label: '2-4 hours' },
-                    { value: 'long', label: '4+ hours' },
-                    { value: 'multi-day', label: 'Multi-day' }
-                  ].map(option => (
-                    <label key={option.value} className="checkbox-label">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Category</label>
+                  <div className="space-y-2">
+                    {[
+                      { value: 'music', label: 'Music' },
+                      { value: 'arts', label: 'Arts & Culture' },
+                      { value: 'food', label: 'Food & Drink' },
+                      { value: 'outdoor', label: 'Outdoor' },
+                      { value: 'family', label: 'Family' },
+                      { value: 'networking', label: 'Networking' }
+                    ].map(option => (
+                      <label key={option.value} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:text-purple-700">
+                        <input
+                          type="checkbox"
+                          value={option.value}
+                          checked={filters.category.includes(option.value)}
+                          onChange={(e) => handleMultiSelectChange('category', option.value)}
+                          className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                        />
+                        <span className="font-medium">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Price Range ($)</label>
+                  <div className="space-y-3">
+                    <div>
+                      <label htmlFor="price-min" className="block text-xs text-gray-600 mb-1 font-medium">Min</label>
                       <input
-                        type="checkbox"
-                        value={option.value}
-                        checked={filters.duration.includes(option.value)}
-                        onChange={(e) => handleMultiSelectChange('duration', option.value)}
+                        type="number"
+                        id="price-min"
+                        min="0"
+                        step="0.01"
+                        value={filters.priceRange.min}
+                        onChange={(e) => handlePriceRangeChange('min', e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-3 py-2 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
                       />
-                      {option.label}
-                    </label>
-                  ))}
+                    </div>
+                    <div>
+                      <label htmlFor="price-max" className="block text-xs text-gray-600 mb-1 font-medium">Max</label>
+                      <input
+                        type="number"
+                        id="price-max"
+                        min="0"
+                        step="0.01"
+                        value={filters.priceRange.max}
+                        onChange={(e) => handlePriceRangeChange('max', e.target.value)}
+                        placeholder="No limit"
+                        className="w-full px-3 py-2 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Duration</label>
+                  <div className="space-y-2">
+                    {[
+                      { value: 'short', label: 'Less than 2 hours' },
+                      { value: 'medium', label: '2-4 hours' },
+                      { value: 'long', label: '4+ hours' },
+                      { value: 'multi-day', label: 'Multi-day' }
+                    ].map(option => (
+                      <label key={option.value} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:text-purple-700">
+                        <input
+                          type="checkbox"
+                          value={option.value}
+                          checked={filters.duration.includes(option.value)}
+                          onChange={(e) => handleMultiSelectChange('duration', option.value)}
+                          className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                        />
+                        <span className="font-medium">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          <button type="submit" className="search-button" disabled={loading}>
+          <button
+            type="submit"
+            className="search-button px-4 py-2 text-sm font-medium text-gray-700 bg-white/60 hover:bg-white/80 border border-gray-300 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={loading}
+          >
             {loading ? 'Searching...' : 'Search Events'}
           </button>
         </form>
 
-        <div className="results-section">
-          <h2>Search Results</h2>
+        <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6">
+          <h2 className="m-0 mb-6 text-gray-800 text-3xl font-bold">Search Results</h2>
           {error && (
-            <div className="error-message">
-              <p>{error}</p>
+            <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 mb-6 text-red-700">
+              <p className="m-0">{error}</p>
             </div>
           )}
           {loading ? (
-            <div className="loading">
+            <div className="text-center py-12 text-purple-600 text-lg">
               <p>Loading events...</p>
             </div>
           ) : events.length === 0 && !error ? (
-            <div className="no-results">
-              <p>Enter a location and click "Search Events" to find events in your area.</p>
+            <div className="text-center py-12 text-gray-600">
+              <p>Enter a location and click "Search" to find events in your area.</p>
             </div>
           ) : (
-            <div className="events-list">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {events.map(event => (
-                <div key={event.id} className="event-card">
+                <div key={event.id} className="bg-gray-50 rounded-lg border-2 border-gray-200 transition-all overflow-hidden flex flex-col hover:border-purple-500 hover:shadow-lg hover:-translate-y-1">
                   {event.image && (
-                    <img src={event.image} alt={event.name} className="event-image" />
+                    <img src={event.image} alt={event.name} className="w-full h-48 object-cover bg-gray-200" />
                   )}
-                  <div className="event-content">
-                    <h3>{event.name}</h3>
+                  <div className="p-6">
+                    <h3 className="m-0 mb-3 text-gray-800 text-xl font-bold">{event.name}</h3>
                     {event.venue && (
-                      <p className="event-venue">🏢 {event.venue}</p>
+                      <p className="m-2 text-gray-600 text-sm">🏢 {event.venue}</p>
                     )}
                     {event.location && (
-                      <p className="event-location">📍 {event.location}</p>
+                      <p className="m-2 text-gray-600 text-sm">📍 {event.location}</p>
                     )}
-                    <p className="event-date">
+                    <p className="m-2 text-gray-600 text-sm">
                       📅 {event.date}
                       {event.time && ` at ${event.time}`}
                     </p>
                     {event.priceRange && event.priceRange.min !== undefined && (
-                      <p className="event-price">
+                      <p className="m-2 text-gray-600 text-sm">
                         💵 {event.priceRange.currency || 'USD'} ${event.priceRange.min}
                         {event.priceRange.max && event.priceRange.max !== event.priceRange.min && ` - $${event.priceRange.max}`}
                       </p>
                     )}
                     {event.url && (
-                      <a href={event.url} target="_blank" rel="noopener noreferrer" className="event-link">
+                      <a href={event.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline">
                         View on Ticketmaster →
                       </a>
                     )}
@@ -501,8 +556,8 @@ function App() {
         </div>
       </main>
 
-      <footer className="app-footer">
-        <p>Event Finder - Find events in your area</p>
+      <footer className="bg-white/95 backdrop-blur-sm py-6 px-4 text-center text-gray-600 mt-auto">
+        <p className="m-0">Event Finder - Find events in your area</p>
       </footer>
     </div>
   );
