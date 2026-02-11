@@ -38,7 +38,7 @@ function App() {
   
   // Popular cities for quick selection
   const popularCities = [
-    { city: 'New York', state: 'New York' },
+    { city: 'New York City', state: 'New York' },
     { city: 'Los Angeles', state: 'California' },
     { city: 'Chicago', state: 'Illinois' },
     { city: 'Houston', state: 'Texas' },
@@ -494,11 +494,7 @@ function App() {
             </div>
           )}
 
-          <button
-            type="submit"
-            className="search-button px-4 py-2 text-sm font-medium text-gray-700 bg-white/60 hover:bg-white/80 border border-gray-300 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={loading}
-          >
+          <button type="submit" className="search-button" disabled={loading}>
             {loading ? 'Searching...' : 'Search Events'}
           </button>
         </form>
