@@ -1,1 +1,2 @@
-
+## Wendy
+The tool I used was ChatGPT in the browser, without any VSCode extensions. I used it to help with my task of authentication, integrating Firebase and Google OAuth into a login page with the option to continue as guest. ChatGPT was very helpful in generating me code files and telling me where to go in the Firebase developer console and how to structure my authentication files in my repo. I plan to also use it to create both a frontend component that will hook into the authentication and user databases for state saving. To ensure correctness, I took the setup files from ChatGPT and read through them, doing manual debugging and further prompting the AI to explain code sections when necessary.
