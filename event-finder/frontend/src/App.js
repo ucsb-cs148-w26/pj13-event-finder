@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 import citiesData from './cities.json';
 
@@ -36,6 +36,7 @@ function App() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   
   // Popular cities for quick selection
   const popularCities = [
@@ -83,6 +84,7 @@ function App() {
     setError('');
     setEvents([]);
     setKeywordFilter('');
+    setCurrentPage(1);
 
     try {
       // Build query parameters
@@ -230,6 +232,30 @@ function App() {
           location.includes(normalizedKeyword)
         );
       });
+
+  // Reset to page 1 when keyword filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [keywordFilter]);
+
+  // Pagination calculations
+  const EVENTS_PER_PAGE = 12;
+  const totalPages = Math.ceil(filteredEvents.length / EVENTS_PER_PAGE);
+  const startIndex = (currentPage - 1) * EVENTS_PER_PAGE;
+  const endIndex = startIndex + EVENTS_PER_PAGE;
+  const paginatedEvents = filteredEvents.slice(startIndex, endIndex);
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
 
   return (
     <div
@@ -558,39 +584,64 @@ function App() {
                   <p>No events match your keywords. Try a different search term.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredEvents.map(event => (
-                    <div key={event.id} className="bg-gray-50 rounded-lg border-2 border-gray-200 transition-all overflow-hidden flex flex-col hover:border-purple-500 hover:shadow-lg hover:-translate-y-1">
-                      {event.image && (
-                        <img src={event.image} alt={event.name} className="w-full h-48 object-cover bg-gray-200" />
-                      )}
-                      <div className="p-6">
-                        <h3 className="m-0 mb-3 text-gray-800 text-xl font-bold">{event.name}</h3>
-                        {event.venue && (
-                          <p className="m-2 text-gray-600 text-sm">🏢 {event.venue}</p>
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {paginatedEvents.map(event => (
+                      <div key={event.id} className="bg-gray-50 rounded-lg border-2 border-gray-200 transition-all overflow-hidden flex flex-col hover:border-purple-500 hover:shadow-lg hover:-translate-y-1">
+                        {event.image && (
+                          <img src={event.image} alt={event.name} className="w-full h-48 object-cover bg-gray-200" />
                         )}
-                        {event.location && (
-                          <p className="m-2 text-gray-600 text-sm">📍 {event.location}</p>
-                        )}
-                        <p className="m-2 text-gray-600 text-sm">
-                          📅 {event.date}
-                          {event.time && ` at ${event.time}`}
-                        </p>
-                        {event.priceRange && event.priceRange.min !== undefined && (
+                        <div className="p-6">
+                          <h3 className="m-0 mb-3 text-gray-800 text-xl font-bold">{event.name}</h3>
+                          {event.venue && (
+                            <p className="m-2 text-gray-600 text-sm">🏢 {event.venue}</p>
+                          )}
+                          {event.location && (
+                            <p className="m-2 text-gray-600 text-sm">📍 {event.location}</p>
+                          )}
                           <p className="m-2 text-gray-600 text-sm">
-                            💵 {event.priceRange.currency || 'USD'} ${event.priceRange.min}
-                            {event.priceRange.max && event.priceRange.max !== event.priceRange.min && ` - $${event.priceRange.max}`}
+                            📅 {event.date}
+                            {event.time && ` at ${event.time}`}
                           </p>
-                        )}
-                        {event.url && (
-                          <a href={event.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline">
-                            View on Ticketmaster →
-                          </a>
-                        )}
+                          {event.priceRange && event.priceRange.min !== undefined && (
+                            <p className="m-2 text-gray-600 text-sm">
+                              💵 {event.priceRange.currency || 'USD'} ${event.priceRange.min}
+                              {event.priceRange.max && event.priceRange.max !== event.priceRange.min && ` - $${event.priceRange.max}`}
+                            </p>
+                          )}
+                          {event.url && (
+                            <a href={event.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline">
+                              View on Ticketmaster →
+                            </a>
+                          )}
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                  
+                  {/* Pagination controls */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-4 mt-8 pt-6 border-t border-gray-200">
+                      <button
+                        onClick={handlePreviousPage}
+                        disabled={currentPage === 1}
+                        className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-lg transition-all hover:bg-gray-50 hover:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                      >
+                        ← Back
+                      </button>
+                      <span className="text-sm font-medium text-gray-700">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <button
+                        onClick={handleNextPage}
+                        disabled={currentPage === totalPages}
+                        className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-lg transition-all hover:bg-gray-50 hover:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                      >
+                        Next →
+                      </button>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </>
           )}
