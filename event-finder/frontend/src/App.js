@@ -25,6 +25,7 @@ function App() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [usePreciseLocation, setUsePreciseLocation] = useState(false);
+  const [keywordFilter, setKeywordFilter] = useState('');
   const [filters, setFilters] = useState({
     eventType: [],
     category: [],
@@ -81,6 +82,7 @@ function App() {
     setLoading(true);
     setError('');
     setEvents([]);
+    setKeywordFilter('');
 
     try {
       // Build query parameters
@@ -213,6 +215,21 @@ function App() {
     setShowStateTypeahead(false);
     setShowCityTypeahead(false);
   };
+
+  // Filter events client-side by keyword (event name, venue, or location)
+  const normalizedKeyword = keywordFilter.trim().toLowerCase();
+  const filteredEvents = !normalizedKeyword
+    ? events
+    : events.filter((event) => {
+        const name = (event.name || '').toLowerCase();
+        const venue = (event.venue || '').toLowerCase();
+        const location = (event.location || '').toLowerCase();
+        return (
+          name.includes(normalizedKeyword) ||
+          venue.includes(normalizedKeyword) ||
+          location.includes(normalizedKeyword)
+        );
+      });
 
   return (
     <div
@@ -515,39 +532,67 @@ function App() {
               <p>Enter a location and click "Search" to find events in your area.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {events.map(event => (
-                <div key={event.id} className="bg-gray-50 rounded-lg border-2 border-gray-200 transition-all overflow-hidden flex flex-col hover:border-purple-500 hover:shadow-lg hover:-translate-y-1">
-                  {event.image && (
-                    <img src={event.image} alt={event.name} className="w-full h-48 object-cover bg-gray-200" />
-                  )}
-                  <div className="p-6">
-                    <h3 className="m-0 mb-3 text-gray-800 text-xl font-bold">{event.name}</h3>
-                    {event.venue && (
-                      <p className="m-2 text-gray-600 text-sm">🏢 {event.venue}</p>
-                    )}
-                    {event.location && (
-                      <p className="m-2 text-gray-600 text-sm">📍 {event.location}</p>
-                    )}
-                    <p className="m-2 text-gray-600 text-sm">
-                      📅 {event.date}
-                      {event.time && ` at ${event.time}`}
-                    </p>
-                    {event.priceRange && event.priceRange.min !== undefined && (
-                      <p className="m-2 text-gray-600 text-sm">
-                        💵 {event.priceRange.currency || 'USD'} ${event.priceRange.min}
-                        {event.priceRange.max && event.priceRange.max !== event.priceRange.min && ` - $${event.priceRange.max}`}
-                      </p>
-                    )}
-                    {event.url && (
-                      <a href={event.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline">
-                        View on Ticketmaster →
-                      </a>
-                    )}
-                  </div>
+            <>
+              {/* Keyword filter appears only when there are search results */}
+              <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div className="flex-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Filter by keyword
+                  </label>
+                  <input
+                    type="text"
+                    value={keywordFilter}
+                    onChange={(e) => setKeywordFilter(e.target.value)}
+                    placeholder="Search within results (event name, venue, location)..."
+                    className="w-full px-4 py-2.5 bg-white/80 border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  />
                 </div>
-              ))}
-            </div>
+                <p className="m-0 text-sm text-gray-600 md:ml-4">
+                  Showing <span className="font-semibold">{filteredEvents.length}</span> of{' '}
+                  <span className="font-semibold">{events.length}</span> events
+                </p>
+              </div>
+
+              {filteredEvents.length === 0 ? (
+                <div className="text-center py-8 text-gray-600">
+                  <p>No events match your keywords. Try a different search term.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredEvents.map(event => (
+                    <div key={event.id} className="bg-gray-50 rounded-lg border-2 border-gray-200 transition-all overflow-hidden flex flex-col hover:border-purple-500 hover:shadow-lg hover:-translate-y-1">
+                      {event.image && (
+                        <img src={event.image} alt={event.name} className="w-full h-48 object-cover bg-gray-200" />
+                      )}
+                      <div className="p-6">
+                        <h3 className="m-0 mb-3 text-gray-800 text-xl font-bold">{event.name}</h3>
+                        {event.venue && (
+                          <p className="m-2 text-gray-600 text-sm">🏢 {event.venue}</p>
+                        )}
+                        {event.location && (
+                          <p className="m-2 text-gray-600 text-sm">📍 {event.location}</p>
+                        )}
+                        <p className="m-2 text-gray-600 text-sm">
+                          📅 {event.date}
+                          {event.time && ` at ${event.time}`}
+                        </p>
+                        {event.priceRange && event.priceRange.min !== undefined && (
+                          <p className="m-2 text-gray-600 text-sm">
+                            💵 {event.priceRange.currency || 'USD'} ${event.priceRange.min}
+                            {event.priceRange.max && event.priceRange.max !== event.priceRange.min && ` - $${event.priceRange.max}`}
+                          </p>
+                        )}
+                        {event.url && (
+                          <a href={event.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline">
+                            View on Ticketmaster →
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>
