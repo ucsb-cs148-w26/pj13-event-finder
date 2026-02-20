@@ -1,4 +1,6 @@
 """
+/api/router-test?location=Los%20Angeles&start_date=2026-02-01T00:00&end_date=2026-03-01T00:00
+^Use for testing API endpoint
 backend/api/llm_router.py
 
 LLM-based API router for event providers.
