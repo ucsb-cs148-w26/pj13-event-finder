@@ -73,7 +73,7 @@ def search_events(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None
 ):
-    return ticketmaster.fetch_events(
+    res = route_and_fetch_events(
         location=location,
         start_date=start_date,
         end_date=end_date,
@@ -82,3 +82,5 @@ def search_events(
         min_price=min_price,
         max_price=max_price
     )
+
+    return {"events": res.get("events", []), "total": res.get("total", 0)}
