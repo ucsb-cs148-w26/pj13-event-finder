@@ -1,11 +1,16 @@
 import os
 import requests
+from pathlib import Path
 from typing import Optional, Dict, List, Any
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 
-load_dotenv()
+# Load backend/.env by path so it works regardless of process CWD; override so our .env wins over empty system env vars
+_BACKEND_DIR = Path(__file__).resolve().parents[1]
+_env_path = _BACKEND_DIR / ".env"
+load_dotenv(dotenv_path=_env_path, override=True)
+_parsed = dotenv_values(_env_path)
+TICKETMASTER_API_KEY = (os.environ.get("TICKETMASTER_API_KEY") or "").strip() or (_parsed.get("TICKETMASTER_API_KEY") or "").strip()
 
-TICKETMASTER_API_KEY = os.environ.get("TICKETMASTER_API_KEY", "")
 TICKETMASTER_BASE_URL = "https://app.ticketmaster.com/discovery/v2"
 
 def fetch_events(
@@ -15,15 +20,19 @@ def fetch_events(
     event_type: Optional[str] = None,
     category: Optional[str] = None,
     min_price: Optional[float] = None,
-    max_price: Optional[float] = None
+    max_price: Optional[float] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    radius: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Service function to query Ticketmaster API and format the results.
+    Uses latlong + radius when lat/lon provided; otherwise uses city (location).
     """
-    
     if not TICKETMASTER_API_KEY:
+        _key_present_but_empty = "TICKETMASTER_API_KEY" in os.environ and not (os.environ.get("TICKETMASTER_API_KEY") or "").strip()
         return {
-            "error": "Ticketmaster API key not configured",
+            "error": "Ticketmaster API key not configured. Add your key in backend/.env as TICKETMASTER_API_KEY=your_key (value was empty)." if _key_present_but_empty else "Ticketmaster API key not configured",
             "events": []
         }
     
@@ -34,7 +43,11 @@ def fetch_events(
         
     }
     
-    if location:
+    if lat is not None and lon is not None:
+        params["latlong"] = f"{lat},{lon}"
+        params["radius"] = str(radius if radius is not None and radius > 0 else 25)
+        params["unit"] = "miles"
+    elif location:
         params["city"] = location
     
     if start_date:

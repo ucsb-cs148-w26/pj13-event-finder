@@ -25,6 +25,11 @@ function App() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [usePreciseLocation, setUsePreciseLocation] = useState(false);
+  const [preciseLat, setPreciseLat] = useState(null);
+  const [preciseLon, setPreciseLon] = useState(null);
+  const [preciseLocationError, setPreciseLocationError] = useState(null);
+  const [preciseLocationLoading, setPreciseLocationLoading] = useState(false);
+  const [preciseRadius, setPreciseRadius] = useState(25);
   const [keywordFilter, setKeywordFilter] = useState('');
   const [filters, setFilters] = useState({
     eventType: [],
@@ -89,18 +94,27 @@ function App() {
     try {
       // Build query parameters
       const params = new URLSearchParams();
-      // Combine city and state into location string format: "City, State"
-      const locationString = cityQuery && selectedState 
-        ? `${cityQuery}, ${selectedState}` 
-        : cityQuery || selectedState || '';
-      
-      if (!locationString) {
-        setError('Please select a city and state');
-        setLoading(false);
-        return;
+      if (usePreciseLocation) {
+        if (preciseLocationLoading || preciseLat == null || preciseLon == null) {
+          setError(preciseLocationLoading ? 'Getting your location…' : 'Please allow location or enter city and state');
+          setLoading(false);
+          return;
+        }
+        const radius = preciseRadius && Number(preciseRadius) > 0 ? Number(preciseRadius) : 25;
+        params.append('lat', String(preciseLat));
+        params.append('lon', String(preciseLon));
+        params.append('radius', String(radius));
+      } else {
+        const locationString = cityQuery && selectedState
+          ? `${cityQuery}, ${selectedState}`
+          : cityQuery || selectedState || '';
+        if (!locationString) {
+          setError('Please select a city and state');
+          setLoading(false);
+          return;
+        }
+        params.append('location', locationString);
       }
-      
-      params.append('location', locationString);
       
       // Auto-fill default times if user only entered dates
       let processedStartDate = startDate;
@@ -293,8 +307,9 @@ function App() {
                       onBlur={() => window.setTimeout(() => setShowStateTypeahead(false), 150)}
                       placeholder="Start typing a state (e.g., California)"
                       autoComplete="off"
-                      required
-                      className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
+                      required={!usePreciseLocation}
+                      disabled={usePreciseLocation}
+                      className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium disabled:bg-gray-100 disabled:cursor-not-allowed"
                     />
                     {showStateTypeahead && stateResults.length > 0 && (
                       <ul className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
@@ -331,8 +346,8 @@ function App() {
                       onBlur={() => window.setTimeout(() => setShowCityTypeahead(false), 150)}
                       placeholder={selectedState ? `City in ${selectedState}` : 'Select state first'}
                       autoComplete="off"
-                      disabled={!selectedState}
-                      required
+                      disabled={!selectedState || usePreciseLocation}
+                      required={!usePreciseLocation}
                       className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:bg-gray-100 disabled:cursor-not-allowed font-medium"
                     />
                     {showCityTypeahead && cityQuery.length >= 1 && cityResults.length === 0 && (
@@ -405,23 +420,77 @@ function App() {
             </div>
 
             {/* Additional Options */}
-            <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <div className="mt-4 flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={usePreciseLocation}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setUsePreciseLocation(checked);
+                        setPreciseLocationError(null);
+                        setPreciseLat(null);
+                        setPreciseLon(null);
+                        if (checked) {
+                          setPreciseLocationLoading(true);
+                          if (!navigator.geolocation) {
+                            setPreciseLocationError('Geolocation not supported');
+                            setPreciseLocationLoading(false);
+                            return;
+                          }
+                          navigator.geolocation.getCurrentPosition(
+                            (pos) => {
+                              setPreciseLat(pos.coords.latitude);
+                              setPreciseLon(pos.coords.longitude);
+                              setPreciseLocationError(null);
+                              setPreciseLocationLoading(false);
+                            },
+                            (err) => {
+                              setPreciseLocationError(err.message || 'Location unavailable');
+                              setPreciseLocationLoading(false);
+                            },
+                            { timeout: 10000, maximumAge: 60000 }
+                          );
+                        } else {
+                          setPreciseLocationLoading(false);
+                        }
+                      }}
+                      className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                    />
+                    <span className="font-medium">Use My Precise Location</span>
+                  </label>
+                  {usePreciseLocation && (
+                    <span className="text-sm text-gray-600">
+                      {preciseLocationLoading && 'Getting location…'}
+                      {!preciseLocationLoading && preciseLocationError && (
+                        <span className="text-red-600"> {preciseLocationError}</span>
+                      )}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-transparent hover:bg-white/60 border border-gray-300 rounded-lg transition-all"
+                >
+                  {showFilters ? 'Hide' : 'Show'} Filters
+                </button>
+              </div>
+              <div className="w-full max-w-xs">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Radius (miles)</label>
                 <input
-                  type="checkbox"
-                  checked={usePreciseLocation}
-                  onChange={(e) => setUsePreciseLocation(e.target.checked)}
-                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={preciseRadius}
+                  onChange={(e) => setPreciseRadius(e.target.value ? Number(e.target.value) : '')}
+                  disabled={!usePreciseLocation}
+                  placeholder="e.g. 25"
+                  className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
-                <span className="font-medium">Use My Precise Location</span>
-              </label>
-              <button
-                type="button"
-                onClick={() => setShowFilters(!showFilters)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-transparent hover:bg-white/60 border border-gray-300 rounded-lg transition-all"
-              >
-                {showFilters ? 'Hide' : 'Show'} Filters
-              </button>
+              </div>
             </div>
           </div>
 

@@ -65,7 +65,10 @@ def router_test(
 
 @app.get("/api/events")
 def search_events(
-    location: str,
+    location: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    radius: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     event_type: Optional[str] = None,
@@ -73,6 +76,21 @@ def search_events(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None
 ):
+    if lat is not None and lon is not None:
+        return ticketmaster.fetch_events(
+            location=location or "",
+            start_date=start_date,
+            end_date=end_date,
+            event_type=event_type,
+            category=category,
+            min_price=min_price,
+            max_price=max_price,
+            lat=lat,
+            lon=lon,
+            radius=radius,  
+        )
+    if not location:
+        return {"error": "Provide location (city, state) or lat and lon.", "events": []}
     res = route_and_fetch_events(
         location=location,
         start_date=start_date,
@@ -82,5 +100,4 @@ def search_events(
         min_price=min_price,
         max_price=max_price
     )
-
     return {"events": res.get("events", []), "total": res.get("total", 0)}
