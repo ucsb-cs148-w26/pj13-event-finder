@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 import citiesData from './cities.json';
+import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { auth, googleProvider } from "./firebase";
 
 function App() {
   const US_STATES = [
@@ -25,6 +27,12 @@ function App() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [usePreciseLocation, setUsePreciseLocation] = useState(false);
+  const [preciseLat, setPreciseLat] = useState(null);
+  const [preciseLon, setPreciseLon] = useState(null);
+  const [preciseLocationError, setPreciseLocationError] = useState(null);
+  const [preciseLocationLoading, setPreciseLocationLoading] = useState(false);
+  const [preciseRadius, setPreciseRadius] = useState(25);
+  const [keywordFilter, setKeywordFilter] = useState('');
   const [filters, setFilters] = useState({
     eventType: [],
     category: [],
@@ -35,6 +43,25 @@ function App() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  // Popular cities for quick selection
+  const popularCities = [
+    { city: 'New York City', state: 'New York' },
+    { city: 'Los Angeles', state: 'California' },
+    { city: 'Chicago', state: 'Illinois' },
+    { city: 'Houston', state: 'Texas' },
+    { city: 'Phoenix', state: 'Arizona' },
+    { city: 'Philadelphia', state: 'Pennsylvania' },
+    { city: 'San Antonio', state: 'Texas' },
+    { city: 'San Diego', state: 'California' }
+  ];
+  const [user, setUser] = useState(null);
+
+  React.useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
+    return () => unsub();
+  }, []);
 
   // Compute state results directly from stateQuery
   const getStateResults = () => {
@@ -69,22 +96,33 @@ function App() {
     setLoading(true);
     setError('');
     setEvents([]);
+    setKeywordFilter('');
+    setCurrentPage(1);
 
     try {
       // Build query parameters
       const params = new URLSearchParams();
-      // Combine city and state into location string format: "City, State"
-      const locationString = cityQuery && selectedState 
-        ? `${cityQuery}, ${selectedState}` 
-        : cityQuery || selectedState || '';
-      
-      if (!locationString) {
-        setError('Please select a city and state');
-        setLoading(false);
-        return;
+      if (usePreciseLocation) {
+        if (preciseLocationLoading || preciseLat == null || preciseLon == null) {
+          setError(preciseLocationLoading ? 'Getting your location…' : 'Please allow location or enter city and state');
+          setLoading(false);
+          return;
+        }
+        const radius = preciseRadius && Number(preciseRadius) > 0 ? Number(preciseRadius) : 25;
+        params.append('lat', String(preciseLat));
+        params.append('lon', String(preciseLon));
+        params.append('radius', String(radius));
+      } else {
+        const locationString = cityQuery && selectedState
+          ? `${cityQuery}, ${selectedState}`
+          : cityQuery || selectedState || '';
+        if (!locationString) {
+          setError('Please select a city and state');
+          setLoading(false);
+          return;
+        }
+        params.append('location', locationString);
       }
-      
-      params.append('location', locationString);
       
       // Auto-fill default times if user only entered dates
       let processedStartDate = startDate;
@@ -120,7 +158,7 @@ function App() {
         params.append('end_date', processedEndDate);
       }
       if (filters.eventType.length > 0) {
-        params.append('event_type', filters.eventType[0]); // Ticketmaster API typically takes one classification
+        params.append('event_type', filters.eventType[0]);
       }
       if (filters.category.length > 0) {
         params.append('category', filters.category[0]);
@@ -132,9 +170,6 @@ function App() {
         params.append('max_price', filters.priceRange.max);
       }
 
-      // Call backend API
-      // For local development, use http://localhost:8000 or your backend URL
-      // For production, set REACT_APP_BACKEND_URL=https://pj13-event-finder-backend.vercel.app in .env
       const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
       const apiUrl = `${backendUrl}/api/events?${params.toString()}`;
       console.log('API URL:', apiUrl);
@@ -179,13 +214,11 @@ function App() {
       const isSelected = currentArray.includes(value);
       
       if (isSelected) {
-        // Remove the value if it's already selected
         return {
           ...prev,
           [filterName]: currentArray.filter(item => item !== value)
         };
       } else {
-        // Add the value if it's not selected
         return {
           ...prev,
           [filterName]: [...currentArray, value]
@@ -194,250 +227,427 @@ function App() {
     });
   };
 
+  const handlePopularCityClick = (city, state) => {
+    setSelectedState(state);
+    setStateQuery(state);
+    setCityQuery(city);
+    setShowStateTypeahead(false);
+    setShowCityTypeahead(false);
+  };
+
+  // Filter events client-side by keyword (event name, venue, or location)
+  const normalizedKeyword = keywordFilter.trim().toLowerCase();
+  const filteredEvents = !normalizedKeyword
+    ? events
+    : events.filter((event) => {
+        const name = (event.name || '').toLowerCase();
+        const venue = (event.venue || '').toLowerCase();
+        const location = (event.location || '').toLowerCase();
+        return (
+          name.includes(normalizedKeyword) ||
+          venue.includes(normalizedKeyword) ||
+          location.includes(normalizedKeyword)
+        );
+      });
+
+  // Reset to page 1 when keyword filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [keywordFilter]);
+
+  // Pagination calculations
+  const EVENTS_PER_PAGE = 12;
+  const totalPages = Math.ceil(filteredEvents.length / EVENTS_PER_PAGE);
+  const startIndex = (currentPage - 1) * EVENTS_PER_PAGE;
+  const endIndex = startIndex + EVENTS_PER_PAGE;
+  const paginatedEvents = filteredEvents.slice(startIndex, endIndex);
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+  
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+      // signed in; user state updates via onAuthStateChanged
+    } catch (e) {
+      console.error("Firebase sign-in error:", e);
+      alert(`${e.code}\n${e.message}`);
+      setError(`Sign-in failed: ${e.code} ${e.message}`);
+    }
+  };
+  
+  const handleLogout = async () => {
+    await signOut(auth);
+  };
+
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <h1>Event Finder</h1>
-        <p className="subtitle">Discover events in your area with the click of a button</p>
-      </header>
-
-      <main className="main-content">
-        <form className="search-form" onSubmit={handleSearch}>
-          <div className="form-section">
-            <label>Location *</label>
-
-            <div className="location-grid">
-              <div className="typeahead">
-                <label className="sub-label" htmlFor="state">State</label>
-                <input
-                  type="text"
-                  id="state"
-                  value={stateQuery}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setStateQuery(next);
-                    setSelectedState('');
-                    setCityQuery('');
-                    setShowStateTypeahead(true);
-                  }}
-                  onFocus={() => setShowStateTypeahead(true)}
-                  onBlur={() => window.setTimeout(() => setShowStateTypeahead(false), 150)}
-                  placeholder="Start typing a state (e.g., California)"
-                  autoComplete="off"
-                  required
-                />
-
-                {showStateTypeahead && stateResults.length > 0 && (
-                  <ul className="typeahead-results" role="listbox" aria-label="State suggestions">
-                    {stateResults.map(state => (
-                      <li
-                        key={state}
-                        role="option"
-                        tabIndex={-1}
-                        onMouseDown={() => {
-                          setSelectedState(state);
-                          setStateQuery(state);
-                          setShowStateTypeahead(false);
-                          setCityQuery('');
-                        }}
-                      >
-                        {state}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div className="typeahead">
-                <label className="sub-label" htmlFor="city">City</label>
-                <input
-                  type="text"
-                  id="city"
-                  value={cityQuery}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setCityQuery(next);
-                    setShowCityTypeahead(true);
-                  }}
-                  onFocus={() => setShowCityTypeahead(true)}
-                  onBlur={() => window.setTimeout(() => setShowCityTypeahead(false), 150)}
-                  placeholder={selectedState ? `Start typing a city in ${selectedState}` : 'Select a state first'}
-                  autoComplete="off"
-                  disabled={!selectedState}
-                  required
-                />
-
-                {showCityTypeahead && cityQuery.length >= 1 && cityResults.length === 0 && (
-                  <div className="typeahead-status">No matching cities found.</div>
-                )}
-
-                {showCityTypeahead && cityResults.length > 0 && (
-                  <ul className="typeahead-results" role="listbox" aria-label="City suggestions">
-                    {cityResults.map(cityName => (
-                      <li
-                        key={`${selectedState}-${cityName}`}
-                        role="option"
-                        tabIndex={-1}
-                        onMouseDown={() => {
-                          setCityQuery(cityName);
-                          setShowCityTypeahead(false);
-                        }}
-                      >
-                        {`${cityName}, ${selectedState}`}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="form-row">
-            <div className="form-section">
-              <label htmlFor="start-date">Start Date & Time</label>
-              <input
-                type="datetime-local"
-                id="start-date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="form-section">
-              <label htmlFor="end-date">End Date & Time</label>
-              <input
-                type="datetime-local"
-                id="end-date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="form-section checkbox-section">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={usePreciseLocation}
-                onChange={(e) => setUsePreciseLocation(e.target.checked)}
-              />
-              Use My Precise Location
-            </label>
-          </div>
-
-          <div className="filters-toggle">
+    <div
+      className="min-h-screen flex flex-col app-bg"
+      style={{ backgroundImage: "url('/background.jpeg')" }}
+    >
+      {/* ONE header */}
+      <header className="bg-white/95 backdrop-blur-sm shadow-md py-8 px-4 text-center relative">
+        {/* Top-right auth area */}
+        <div className="absolute top-4 right-4 flex items-center gap-3">
+          {user ? (
+            <>
+              <span className="text-sm text-gray-700 max-w-[220px] truncate">
+                {user.email}
+              </span>
+              <button
+                type="button"
+                className="sign-in-btn"
+                onClick={handleLogout}
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
             <button
               type="button"
-              className="toggle-filters-btn"
-              onClick={() => setShowFilters(!showFilters)}
+              className="sign-in-btn"
+              onClick={handleGoogleSignIn}
             >
-              {showFilters ? 'Hide' : 'Show'} Filters
+              Sign in
             </button>
+          )}
+        </div>
+
+        <h1 className="m-0 text-gray-800 text-4xl font-bold">Event Finder</h1>
+        <p className="mt-2 mb-0 text-gray-600 text-lg">
+          Discover events in your area with the click of a button
+        </p>
+      </header>
+
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 flex flex-col gap-6">
+        <form className="w-full max-w-6xl mx-auto" onSubmit={handleSearch}>
+          {/* Glassmorphic Search Card */}
+          <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
+            <div className="flex flex-col lg:flex-row gap-4 items-end">
+              {/* Location Group */}
+              <div className="flex-1 w-full">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Location *</label>
+                <div className="flex gap-2">
+                  {/* State Input */}
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      id="state"
+                      value={stateQuery}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setStateQuery(next);
+                        setSelectedState('');
+                        setCityQuery('');
+                        setShowStateTypeahead(true);
+                      }}
+                      onFocus={() => setShowStateTypeahead(true)}
+                      onBlur={() => window.setTimeout(() => setShowStateTypeahead(false), 150)}
+                      placeholder="Start typing a state (e.g., California)"
+                      autoComplete="off"
+                      required={!usePreciseLocation}
+                      disabled={usePreciseLocation}
+                      className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    />
+                    {showStateTypeahead && stateResults.length > 0 && (
+                      <ul className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {stateResults.map(state => (
+                          <li
+                            key={state}
+                            onMouseDown={() => {
+                              setSelectedState(state);
+                              setStateQuery(state);
+                              setShowStateTypeahead(false);
+                              setCityQuery('');
+                            }}
+                            className="px-4 py-2 hover:bg-purple-50 cursor-pointer text-gray-700"
+                          >
+                            {state}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* City Input */}
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      id="city"
+                      value={cityQuery}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setCityQuery(next);
+                        setShowCityTypeahead(true);
+                      }}
+                      onFocus={() => setShowCityTypeahead(true)}
+                      onBlur={() => window.setTimeout(() => setShowCityTypeahead(false), 150)}
+                      placeholder={selectedState ? `City in ${selectedState}` : 'Select state first'}
+                      autoComplete="off"
+                      disabled={!selectedState || usePreciseLocation}
+                      required={!usePreciseLocation}
+                      className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:bg-gray-100 disabled:cursor-not-allowed font-medium"
+                    />
+                    {showCityTypeahead && cityQuery.length >= 1 && cityResults.length === 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg px-4 py-2 text-gray-500 text-sm">
+                        No matching cities found.
+                      </div>
+                    )}
+                    {showCityTypeahead && cityResults.length > 0 && (
+                      <ul className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {cityResults.map(cityName => (
+                          <li
+                            key={`${selectedState}-${cityName}`}
+                            onMouseDown={() => {
+                              setCityQuery(cityName);
+                              setShowCityTypeahead(false);
+                            }}
+                            className="px-4 py-2 hover:bg-purple-50 cursor-pointer text-gray-700"
+                          >
+                            {`${cityName}, ${selectedState}`}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Date Range */}
+              <div className="flex flex-col sm:flex-row gap-2 flex-1 w-full">
+                <div className="flex-1">
+                  <label htmlFor="start-date" className="block text-sm font-semibold text-gray-700 mb-2">Start Date</label>
+                  <input
+                    type="datetime-local"
+                    id="start-date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    required
+                    className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label htmlFor="end-date" className="block text-sm font-semibold text-gray-700 mb-2">End Date</label>
+                  <input
+                    type="datetime-local"
+                    id="end-date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    required
+                    className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Popular Cities Chips */}
+            <div className="mt-4 pt-4 border-t border-gray-200/50">
+              <p className="text-xs text-gray-500 mb-2 font-medium">Popular Cities:</p>
+              <div className="flex flex-wrap gap-2">
+                {popularCities.map((item, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handlePopularCityClick(item.city, item.state)}
+                    className="px-3 py-1 text-xs bg-white/60 hover:bg-white/80 border border-gray-200 rounded-full text-gray-700 hover:text-purple-700 transition-all font-medium"
+                  >
+                    {item.city}, {item.state}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Additional Options */}
+            <div className="mt-4 flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={usePreciseLocation}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setUsePreciseLocation(checked);
+                        setPreciseLocationError(null);
+                        setPreciseLat(null);
+                        setPreciseLon(null);
+                        if (checked) {
+                          setPreciseLocationLoading(true);
+                          if (!navigator.geolocation) {
+                            setPreciseLocationError('Geolocation not supported');
+                            setPreciseLocationLoading(false);
+                            return;
+                          }
+                          navigator.geolocation.getCurrentPosition(
+                            (pos) => {
+                              setPreciseLat(pos.coords.latitude);
+                              setPreciseLon(pos.coords.longitude);
+                              setPreciseLocationError(null);
+                              setPreciseLocationLoading(false);
+                            },
+                            (err) => {
+                              setPreciseLocationError(err.message || 'Location unavailable');
+                              setPreciseLocationLoading(false);
+                            },
+                            { timeout: 10000, maximumAge: 60000 }
+                          );
+                        } else {
+                          setPreciseLocationLoading(false);
+                        }
+                      }}
+                      className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                    />
+                    <span className="font-medium">Use My Precise Location</span>
+                  </label>
+                  {usePreciseLocation && (
+                    <span className="text-sm text-gray-600">
+                      {preciseLocationLoading && 'Getting location…'}
+                      {!preciseLocationLoading && preciseLocationError && (
+                        <span className="text-red-600"> {preciseLocationError}</span>
+                      )}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-transparent hover:bg-white/60 border border-gray-300 rounded-lg transition-all"
+                >
+                  {showFilters ? 'Hide' : 'Show'} Filters
+                </button>
+              </div>
+              <div className="w-full max-w-xs">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Radius (miles)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={preciseRadius}
+                  onChange={(e) => setPreciseRadius(e.target.value ? Number(e.target.value) : '')}
+                  disabled={!usePreciseLocation}
+                  placeholder="e.g. 25"
+                  className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+              </div>
+            </div>
           </div>
 
           {showFilters && (
-            <div className="filters-section">
-              <div className="form-section">
-                <label>Event Type</label>
-                <div className="checkbox-group">
-                  {[
-                    { value: 'concert', label: 'Concert' },
-                    { value: 'sports', label: 'Sports' },
-                    { value: 'theater', label: 'Theater' },
-                    { value: 'festival', label: 'Festival' },
-                    { value: 'conference', label: 'Conference' },
-                    { value: 'workshop', label: 'Workshop' },
-                    { value: 'other', label: 'Other' }
-                  ].map(option => (
-                    <label key={option.value} className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        value={option.value}
-                        checked={filters.eventType.includes(option.value)}
-                        onChange={(e) => handleMultiSelectChange('eventType', option.value)}
-                      />
-                      {option.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="form-section">
-                <label>Category</label>
-                <div className="checkbox-group">
-                  {[
-                    { value: 'music', label: 'Music' },
-                    { value: 'arts', label: 'Arts & Culture' },
-                    { value: 'food', label: 'Food & Drink' },
-                    { value: 'outdoor', label: 'Outdoor' },
-                    { value: 'family', label: 'Family' },
-                    { value: 'networking', label: 'Networking' }
-                  ].map(option => (
-                    <label key={option.value} className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        value={option.value}
-                        checked={filters.category.includes(option.value)}
-                        onChange={(e) => handleMultiSelectChange('category', option.value)}
-                      />
-                      {option.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="form-section">
-                <label>Price Range ($)</label>
-                <div className="price-range-inputs">
-                  <div className="price-input-group">
-                    <label htmlFor="price-min">Min</label>
-                    <input
-                      type="number"
-                      id="price-min"
-                      min="0"
-                      step="0.01"
-                      value={filters.priceRange.min}
-                      onChange={(e) => handlePriceRangeChange('min', e.target.value)}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <span className="price-range-separator">-</span>
-                  <div className="price-input-group">
-                    <label htmlFor="price-max">Max</label>
-                    <input
-                      type="number"
-                      id="price-max"
-                      min="0"
-                      step="0.01"
-                      value={filters.priceRange.max}
-                      onChange={(e) => handlePriceRangeChange('max', e.target.value)}
-                      placeholder="No limit"
-                    />
+            <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Event Type</label>
+                  <div className="space-y-2">
+                    {[
+                      { value: 'concert', label: 'Concert' },
+                      { value: 'sports', label: 'Sports' },
+                      { value: 'theater', label: 'Theater' },
+                      { value: 'festival', label: 'Festival' },
+                      { value: 'conference', label: 'Conference' },
+                      { value: 'workshop', label: 'Workshop' },
+                      { value: 'other', label: 'Other' }
+                    ].map(option => (
+                      <label key={option.value} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:text-purple-700">
+                        <input
+                          type="checkbox"
+                          value={option.value}
+                          checked={filters.eventType.includes(option.value)}
+                          onChange={(e) => handleMultiSelectChange('eventType', option.value)}
+                          className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                        />
+                        <span className="font-medium">{option.label}</span>
+                      </label>
+                    ))}
                   </div>
                 </div>
-              </div>
 
-              <div className="form-section">
-                <label>Duration</label>
-                <div className="checkbox-group">
-                  {[
-                    { value: 'short', label: 'Less than 2 hours' },
-                    { value: 'medium', label: '2-4 hours' },
-                    { value: 'long', label: '4+ hours' },
-                    { value: 'multi-day', label: 'Multi-day' }
-                  ].map(option => (
-                    <label key={option.value} className="checkbox-label">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Category</label>
+                  <div className="space-y-2">
+                    {[
+                      { value: 'music', label: 'Music' },
+                      { value: 'arts', label: 'Arts & Culture' },
+                      { value: 'food', label: 'Food & Drink' },
+                      { value: 'outdoor', label: 'Outdoor' },
+                      { value: 'family', label: 'Family' },
+                      { value: 'networking', label: 'Networking' }
+                    ].map(option => (
+                      <label key={option.value} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:text-purple-700">
+                        <input
+                          type="checkbox"
+                          value={option.value}
+                          checked={filters.category.includes(option.value)}
+                          onChange={(e) => handleMultiSelectChange('category', option.value)}
+                          className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                        />
+                        <span className="font-medium">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Price Range ($)</label>
+                  <div className="space-y-3">
+                    <div>
+                      <label htmlFor="price-min" className="block text-xs text-gray-600 mb-1 font-medium">Min</label>
                       <input
-                        type="checkbox"
-                        value={option.value}
-                        checked={filters.duration.includes(option.value)}
-                        onChange={(e) => handleMultiSelectChange('duration', option.value)}
+                        type="number"
+                        id="price-min"
+                        min="0"
+                        step="0.01"
+                        value={filters.priceRange.min}
+                        onChange={(e) => handlePriceRangeChange('min', e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-3 py-2 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
                       />
-                      {option.label}
-                    </label>
-                  ))}
+                    </div>
+                    <div>
+                      <label htmlFor="price-max" className="block text-xs text-gray-600 mb-1 font-medium">Max</label>
+                      <input
+                        type="number"
+                        id="price-max"
+                        min="0"
+                        step="0.01"
+                        value={filters.priceRange.max}
+                        onChange={(e) => handlePriceRangeChange('max', e.target.value)}
+                        placeholder="No limit"
+                        className="w-full px-3 py-2 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Duration</label>
+                  <div className="space-y-2">
+                    {[
+                      { value: 'short', label: 'Less than 2 hours' },
+                      { value: 'medium', label: '2-4 hours' },
+                      { value: 'long', label: '4+ hours' },
+                      { value: 'multi-day', label: 'Multi-day' }
+                    ].map(option => (
+                      <label key={option.value} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:text-purple-700">
+                        <input
+                          type="checkbox"
+                          value={option.value}
+                          checked={filters.duration.includes(option.value)}
+                          onChange={(e) => handleMultiSelectChange('duration', option.value)}
+                          className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                        />
+                        <span className="font-medium">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -448,61 +658,114 @@ function App() {
           </button>
         </form>
 
-        <div className="results-section">
-          <h2>Search Results</h2>
+        <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6">
+          <h2 className="m-0 mb-6 text-gray-800 text-3xl font-bold">Search Results</h2>
           {error && (
-            <div className="error-message">
-              <p>{error}</p>
+            <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 mb-6 text-red-700">
+              <p className="m-0">{error}</p>
             </div>
           )}
           {loading ? (
-            <div className="loading">
+            <div className="text-center py-12 text-purple-600 text-lg">
               <p>Loading events...</p>
             </div>
           ) : events.length === 0 && !error ? (
-            <div className="no-results">
-              <p>Enter a location and click "Search Events" to find events in your area.</p>
+            <div className="text-center py-12 text-gray-600">
+              <p>Enter a location and click "Search" to find events in your area.</p>
             </div>
           ) : (
-            <div className="events-list">
-              {events.map(event => (
-                <div key={event.id} className="event-card">
-                  {event.image && (
-                    <img src={event.image} alt={event.name} className="event-image" />
-                  )}
-                  <div className="event-content">
-                    <h3>{event.name}</h3>
-                    {event.venue && (
-                      <p className="event-venue">🏢 {event.venue}</p>
-                    )}
-                    {event.location && (
-                      <p className="event-location">📍 {event.location}</p>
-                    )}
-                    <p className="event-date">
-                      📅 {event.date}
-                      {event.time && ` at ${event.time}`}
-                    </p>
-                    {event.priceRange && event.priceRange.min !== undefined && (
-                      <p className="event-price">
-                        💵 {event.priceRange.currency || 'USD'} ${event.priceRange.min}
-                        {event.priceRange.max && event.priceRange.max !== event.priceRange.min && ` - $${event.priceRange.max}`}
-                      </p>
-                    )}
-                    {event.url && (
-                      <a href={event.url} target="_blank" rel="noopener noreferrer" className="event-link">
-                        View on Ticketmaster →
-                      </a>
-                    )}
-                  </div>
+            <>
+              {/* Keyword filter appears only when there are search results */}
+              <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div className="flex-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Filter by keyword
+                  </label>
+                  <input
+                    type="text"
+                    value={keywordFilter}
+                    onChange={(e) => setKeywordFilter(e.target.value)}
+                    placeholder="Search within results (event name, venue, location)..."
+                    className="w-full px-4 py-2.5 bg-white/80 border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  />
                 </div>
-              ))}
-            </div>
+                <p className="m-0 text-sm text-gray-600 md:ml-4">
+                  Showing <span className="font-semibold">{filteredEvents.length}</span> of{' '}
+                  <span className="font-semibold">{events.length}</span> events
+                </p>
+              </div>
+
+              {filteredEvents.length === 0 ? (
+                <div className="text-center py-8 text-gray-600">
+                  <p>No events match your keywords. Try a different search term.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {paginatedEvents.map(event => (
+                      <div key={event.id} className="bg-gray-50 rounded-lg border-2 border-gray-200 transition-all overflow-hidden flex flex-col hover:border-purple-500 hover:shadow-lg hover:-translate-y-1">
+                        {event.image && (
+                          <img src={event.image} alt={event.name} className="w-full h-48 object-cover bg-gray-200" />
+                        )}
+                        <div className="p-6">
+                          <h3 className="m-0 mb-3 text-gray-800 text-xl font-bold">{event.name}</h3>
+                          {event.venue && (
+                            <p className="m-2 text-gray-600 text-sm">🏢 {event.venue}</p>
+                          )}
+                          {event.location && (
+                            <p className="m-2 text-gray-600 text-sm">📍 {event.location}</p>
+                          )}
+                          <p className="m-2 text-gray-600 text-sm">
+                            📅 {event.date}
+                            {event.time && ` at ${event.time}`}
+                          </p>
+                          {event.priceRange && event.priceRange.min !== undefined && (
+                            <p className="m-2 text-gray-600 text-sm">
+                              💵 {event.priceRange.currency || 'USD'} ${event.priceRange.min}
+                              {event.priceRange.max && event.priceRange.max !== event.priceRange.min && ` - $${event.priceRange.max}`}
+                            </p>
+                          )}
+                          {event.url && (
+                            <a href={event.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline">
+                              View on Ticketmaster →
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Pagination controls */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-4 mt-8 pt-6 border-t border-gray-200">
+                      <button
+                        onClick={handlePreviousPage}
+                        disabled={currentPage === 1}
+                        className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-lg transition-all hover:bg-gray-50 hover:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                      >
+                        ← Back
+                      </button>
+                      <span className="text-sm font-medium text-gray-700">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <button
+                        onClick={handleNextPage}
+                        disabled={currentPage === totalPages}
+                        className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-lg transition-all hover:bg-gray-50 hover:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
           )}
         </div>
       </main>
 
-      <footer className="app-footer">
-        <p>Event Finder - Find events in your area</p>
+      <footer className="bg-white/95 backdrop-blur-sm py-6 px-4 text-center text-gray-600 mt-auto">
+        <p className="m-0">Event Finder - Find events in your area</p>
       </footer>
     </div>
   );
