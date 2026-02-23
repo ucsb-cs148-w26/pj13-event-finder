@@ -420,3 +420,27 @@
     flex-direction: column;
   }
 }
+
+.sign-in-btn.top-right {
+  position: absolute;
+  top: 16px;
+  right: 32px;
+}
+
+.sign-in-btn {
+  appearance: none;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: rgba(255,255,255,0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #111;
+  cursor: pointer;
+
+  box-shadow: 0 8px 20px rgba(0,0,0,0.10);
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}

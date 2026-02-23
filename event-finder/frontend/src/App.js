@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import citiesData from './cities.json';
+import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { auth, googleProvider } from "./firebase";
 
 function App() {
   const US_STATES = [
@@ -54,6 +56,12 @@ function App() {
     { city: 'San Antonio', state: 'Texas' },
     { city: 'San Diego', state: 'California' }
   ];
+  const [user, setUser] = useState(null);
+
+  React.useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
+    return () => unsub();
+  }, []);
 
   // Compute state results directly from stateQuery
   const getStateResults = () => {
@@ -150,7 +158,7 @@ function App() {
         params.append('end_date', processedEndDate);
       }
       if (filters.eventType.length > 0) {
-        params.append('event_type', filters.eventType[0]); // Ticketmaster API typically takes one classification
+        params.append('event_type', filters.eventType[0]);
       }
       if (filters.category.length > 0) {
         params.append('category', filters.category[0]);
@@ -162,9 +170,6 @@ function App() {
         params.append('max_price', filters.priceRange.max);
       }
 
-      // Call backend API
-      // For local development, use http://localhost:8000 or your backend URL
-      // For production, set REACT_APP_BACKEND_URL=https://pj13-event-finder-backend.vercel.app in .env
       const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
       const apiUrl = `${backendUrl}/api/events?${params.toString()}`;
       console.log('API URL:', apiUrl);
@@ -209,13 +214,11 @@ function App() {
       const isSelected = currentArray.includes(value);
       
       if (isSelected) {
-        // Remove the value if it's already selected
         return {
           ...prev,
           [filterName]: currentArray.filter(item => item !== value)
         };
       } else {
-        // Add the value if it's not selected
         return {
           ...prev,
           [filterName]: [...currentArray, value]
@@ -270,15 +273,59 @@ function App() {
       setCurrentPage(currentPage + 1);
     }
   };
+  
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+      // signed in; user state updates via onAuthStateChanged
+    } catch (e) {
+      console.error("Firebase sign-in error:", e);
+      alert(`${e.code}\n${e.message}`);
+      setError(`Sign-in failed: ${e.code} ${e.message}`);
+    }
+  };
+  
+  const handleLogout = async () => {
+    await signOut(auth);
+  };
 
   return (
     <div
       className="min-h-screen flex flex-col app-bg"
       style={{ backgroundImage: "url('/background.jpeg')" }}
     >
-      <header className="bg-white/95 backdrop-blur-sm shadow-md py-8 px-4 text-center">
+      {/* ONE header */}
+      <header className="bg-white/95 backdrop-blur-sm shadow-md py-8 px-4 text-center relative">
+        {/* Top-right auth area */}
+        <div className="absolute top-4 right-4 flex items-center gap-3">
+          {user ? (
+            <>
+              <span className="text-sm text-gray-700 max-w-[220px] truncate">
+                {user.email}
+              </span>
+              <button
+                type="button"
+                className="sign-in-btn"
+                onClick={handleLogout}
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="sign-in-btn"
+              onClick={handleGoogleSignIn}
+            >
+              Sign in
+            </button>
+          )}
+        </div>
+
         <h1 className="m-0 text-gray-800 text-4xl font-bold">Event Finder</h1>
-        <p className="mt-2 mb-0 text-gray-600 text-lg">Discover events in your area with the click of a button</p>
+        <p className="mt-2 mb-0 text-gray-600 text-lg">
+          Discover events in your area with the click of a button
+        </p>
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 flex flex-col gap-6">
