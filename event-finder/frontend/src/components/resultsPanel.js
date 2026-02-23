@@ -1,0 +1,176 @@
+// src/components/ResultsPanel.jsx
+import React, { useEffect, useMemo, useState } from "react";
+
+function categorizeEvents(events) {
+  // Simple categorization example:
+  // Group by event.category if present, else "Other".
+  const groups = new Map();
+  for (const e of events) {
+    const key = (e.category || "Other").toString();
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  }
+  return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+export default function ResultsPanel({ events, loading, error }) {
+  const [keywordFilter, setKeywordFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const filteredEvents = useMemo(() => {
+    const normalizedKeyword = keywordFilter.trim().toLowerCase();
+    if (!normalizedKeyword) return events;
+
+    return events.filter((event) => {
+      const name = (event.name || "").toLowerCase();
+      const venue = (event.venue || "").toLowerCase();
+      const location = (event.location || "").toLowerCase();
+      return (
+        name.includes(normalizedKeyword) ||
+        venue.includes(normalizedKeyword) ||
+        location.includes(normalizedKeyword)
+      );
+    });
+  }, [events, keywordFilter]);
+
+  // Reset to page 1 when keyword filter changes or new events arrive
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [keywordFilter, events]);
+
+  // Pagination
+  const EVENTS_PER_PAGE = 12;
+  const totalPages = Math.ceil(filteredEvents.length / EVENTS_PER_PAGE);
+  const startIndex = (currentPage - 1) * EVENTS_PER_PAGE;
+  const paginatedEvents = filteredEvents.slice(startIndex, startIndex + EVENTS_PER_PAGE);
+
+  // Optional categorization (available if you want to render sections later)
+
+  const handlePreviousPage = () => setCurrentPage((p) => Math.max(1, p - 1));
+  const handleNextPage = () => setCurrentPage((p) => Math.min(totalPages, p + 1));
+
+  return (
+    <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6">
+      <h2 className="m-0 mb-6 text-gray-800 text-3xl font-bold">Search Results</h2>
+
+      {error && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 mb-6 text-red-700">
+          <p className="m-0">{error}</p>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-center py-12 text-purple-600 text-lg">
+          <p>Loading events...</p>
+        </div>
+      ) : events.length === 0 && !error ? (
+        <div className="text-center py-12 text-gray-600">
+          <p>Enter a location and click "Search" to find events in your area.</p>
+        </div>
+      ) : (
+        <>
+          {/* Keyword filter appears only when there are search results */}
+          <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Filter by keyword
+              </label>
+              <input
+                type="text"
+                value={keywordFilter}
+                onChange={(e) => setKeywordFilter(e.target.value)}
+                placeholder="Search within results (event name, venue, location)..."
+                className="w-full px-4 py-2.5 bg-white/80 border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+              />
+            </div>
+            <p className="m-0 text-sm text-gray-600 md:ml-4">
+              Showing <span className="font-semibold">{filteredEvents.length}</span> of{" "}
+              <span className="font-semibold">{events.length}</span> events
+            </p>
+          </div>
+
+          {filteredEvents.length === 0 ? (
+            <div className="text-center py-8 text-gray-600">
+              <p>No events match your keywords. Try a different search term.</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {paginatedEvents.map((event) => (
+                  <div
+                    key={event.id}
+                    className="bg-gray-50 rounded-lg border-2 border-gray-200 transition-all overflow-hidden flex flex-col hover:border-purple-500 hover:shadow-lg hover:-translate-y-1"
+                  >
+                    {event.image && (
+                      <img
+                        src={event.image}
+                        alt={event.name}
+                        className="w-full h-48 object-cover bg-gray-200"
+                      />
+                    )}
+                    <div className="p-6">
+                      <h3 className="m-0 mb-3 text-gray-800 text-xl font-bold">
+                        {event.name}
+                      </h3>
+                      {event.venue && (
+                        <p className="m-2 text-gray-600 text-sm">🏢 {event.venue}</p>
+                      )}
+                      {event.location && (
+                        <p className="m-2 text-gray-600 text-sm">📍 {event.location}</p>
+                      )}
+                      <p className="m-2 text-gray-600 text-sm">
+                        📅 {event.date}
+                        {event.time && ` at ${event.time}`}
+                      </p>
+                      {event.priceRange && event.priceRange.min !== undefined && (
+                        <p className="m-2 text-gray-600 text-sm">
+                          💵 {event.priceRange.currency || "USD"} ${event.priceRange.min}
+                          {event.priceRange.max &&
+                            event.priceRange.max !== event.priceRange.min &&
+                            ` - $${event.priceRange.max}`}
+                        </p>
+                      )}
+                      {event.url && (
+                        <a
+                          href={event.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline"
+                        >
+                          View on Ticketmaster →
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pagination controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-4 mt-8 pt-6 border-t border-gray-200">
+                  <button
+                    onClick={handlePreviousPage}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-lg transition-all hover:bg-gray-50 hover:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                  >
+                    ← Back
+                  </button>
+                  <span className="text-sm font-medium text-gray-700">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={handleNextPage}
+                    disabled={currentPage === totalPages}
+                    className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-lg transition-all hover:bg-gray-50 hover:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
