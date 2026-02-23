@@ -12,12 +12,11 @@ We want user feedback on:
 
 ---
 
-## User Ratings (On a Scale of 1–10)
+## User Feedback Metrics
 
-- **Functionality**
-- **UI Design**
-- **User Experience**
-- **Ease of Use**
+- How many of the given filters would you use or find useful?
+- How many events displayed were interesting to you?
+- How long did it take you to figure out the UI works?
 
 ---
 
@@ -29,12 +28,9 @@ Increase functionality and user satisfaction with the app
 
 ### Measureable Metrics
 
-1. Achieve an average rating of at least **8/10** in:
-   - Functionality
-   - Website Design
-   - User Experience
-   - Ease of Use
+1. Achieve an average metric of:
+   - User finds at least 1 filter option useful
+   - User finds at least 1 displayed event interesting
+   - User was able to proply figure out how to use the UI in under 1 minute
 
 2. Testers can use the app without experiencing bugs.
-
-3. The app successully fulfills user needs to a satisfactory level **8/10** times
