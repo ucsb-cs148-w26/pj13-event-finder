@@ -7,3 +7,4 @@ env/
 .env
 
 firebase/firebase-sa.json
+node_modules/
