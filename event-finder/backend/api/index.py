@@ -2,9 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from dotenv import load_dotenv
-from api import ticketmaster
 from api.llm_router import route_and_fetch_events
-
+from api import ticketmaster, allevents
 
 load_dotenv()
 
@@ -12,13 +11,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://pj13-event-finder-2j74.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,10 +20,6 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     return {"Hello": "World", "Platform": "Vercel"}
-
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: str = None):
-    return {"item_id": item_id, "q": q}
 
 @app.get("/health")
 def health_check():
@@ -63,7 +52,7 @@ def router_test(
         "errors": res.get("errors"),
     }
 
-@app.get("/api/events")
+@app.get("/api/ticketmaster")
 def search_events(
     location: Optional[str] = None,
     lat: Optional[float] = None,
@@ -101,3 +90,77 @@ def search_events(
         max_price=max_price
     )
     return {"events": res.get("events", []), "total": res.get("total", 0)}
+    
+    
+@app.get("/api/events")
+def search_events(
+    location: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    event_type: Optional[str] = None,
+    category: Optional[str] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None
+):
+    tm_data = ticketmaster.fetch_events(
+        location=location,
+        start_date=start_date,
+        end_date=end_date,
+        event_type=event_type,
+        category=category,
+        min_price=min_price,
+        max_price=max_price
+    )
+    
+    ae_data = allevents.fetch_events(
+        location=location,
+        start_date=start_date,
+        end_date=end_date,
+        event_type=event_type,
+        category=category,
+        min_price=min_price,
+        max_price=max_price
+    )
+    
+    combined_events = []
+    seen_event_keys = set()
+    tm_count = 0
+    ae_count = 0
+
+    def get_event_key(name, date_str):
+        name_norm = str(name).lower().strip()
+        date_norm = str(date_str)[:10] if date_str else "unknown-date"
+        return f"{name_norm}|{date_norm}"
+
+    for event in tm_data.get("events", []):
+        key = get_event_key(event.get("name"), event.get("date"))
+        if key not in seen_event_keys:
+            event["source"] = "ticketmaster"
+            combined_events.append(event)
+            seen_event_keys.add(key)
+            tm_count += 1
+
+    for event in ae_data.get("events", []):
+        key = get_event_key(event.get("name"), event.get("date"))
+        if key not in seen_event_keys:
+            combined_events.append(event)
+            seen_event_keys.add(key)
+            ae_count += 1
+    
+    print("TM events:", tm_count)
+    print("AE events:", ae_count)
+
+    return {
+        "ticketmaster_status": "error" if "error" in tm_data else "ok",
+        "allevents_status": "error" if "error" in ae_data else "ok",
+        "events": combined_events,
+        "total": len(combined_events)
+    }
+
+@app.get("/api/direct-events")
+def get_direct_events(location: str):
+    """
+    Proxies the request to AllEvents.in, handling the POST requirements.
+    Usage: /api/direct-events?location=New York
+    """
+    return allevents.fetch_events(location=location)
