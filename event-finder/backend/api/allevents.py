@@ -25,7 +25,7 @@ def process_event(item: Dict, default_loc: str) -> Dict:
         "price": extract_price(item),
         "description": item.get("description", ""),
         "type": item.get("@type", ""),
-        "source": "allevents.in"
+        "source": "All Events"
     }
 
 def fetch_events(
