@@ -1,6 +1,6 @@
 // src/App.js
 import React, { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import "./App.css";
 
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
@@ -171,7 +171,7 @@ return (
               onClick={() => (window.location.href = "/bookmarks")}
               className="px-3 py-1.5 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:border-purple-500"
             >
-              View profile
+              View bookmarks
             </button>
 
             <button type="button" className="sign-in-btn" onClick={handleLogout}>
@@ -201,7 +201,7 @@ return (
               <SearchPanel onSearch={handleSearch} loading={loading} />
 
               {/* Entry point 2: Results display + categorization */}
-              <ResultsPanel events={events} loading={loading} error={error} />
+              <ResultsPanel events={events} loading={loading} error={error} user={user} />
             </>
           }
         />

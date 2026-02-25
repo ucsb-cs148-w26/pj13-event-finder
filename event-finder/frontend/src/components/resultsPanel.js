@@ -1,19 +1,8 @@
 // src/components/ResultsPanel.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import BookmarkStar from "./bookmarkStar";
 
-function categorizeEvents(events) {
-  // Simple categorization example:
-  // Group by event.category if present, else "Other".
-  const groups = new Map();
-  for (const e of events) {
-    const key = (e.category || "Other").toString();
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(e);
-  }
-  return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-}
-
-export default function ResultsPanel({ events, loading, error }) {
+export default function ResultsPanel({ events, loading, error, user }) {
   const [keywordFilter, setKeywordFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -101,6 +90,18 @@ export default function ResultsPanel({ events, loading, error }) {
                     key={event.id}
                     className="bg-gray-50 rounded-lg border-2 border-gray-200 transition-all overflow-hidden flex flex-col hover:border-purple-500 hover:shadow-lg hover:-translate-y-1"
                   >
+                    <div className="relative">
+                        {event.image && (
+                        <img
+                            src={event.image}
+                            alt={event.name}
+                            className="w-full h-48 object-cover bg-gray-200"
+                        />
+                        )}
+
+                        {/* Star in the top-right */}
+                        <BookmarkStar user={user} event={event} className="absolute top-3 right-3" />
+                    </div>
                     {event.image && (
                       <img
                         src={event.image}
