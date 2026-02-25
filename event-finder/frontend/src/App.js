@@ -1,5 +1,6 @@
 // src/App.js
 import React, { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import "./App.css";
 
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
@@ -7,6 +8,7 @@ import { auth, googleProvider } from "./utils/firebase";
 
 import SearchPanel from "./components/searchPanel";
 import ResultsPanel from "./components/resultsPanel";
+import ProfileBookmarksPage from "./components/profileBookmarksPage";
 
 function ensureDateTimeDefaults({ startDate, endDate }) {
   let processedStartDate = startDate;
@@ -147,50 +149,76 @@ function App() {
     }
   };
 
-  return (
-    <div
-      className="min-h-screen flex flex-col app-bg"
-      style={{ backgroundImage: "url('/background.jpeg')" }}
-    >
-      {/* ONE header */}
-      <header className="bg-white/95 backdrop-blur-sm shadow-md py-8 px-4 text-center relative">
-        {/* Top-right auth area */}
-        <div className="absolute top-4 right-4 flex items-center gap-3">
-          {user ? (
-            <>
-              <span className="text-sm text-gray-700 max-w-[220px] truncate">
-                {user.email}
-              </span>
-              <button type="button" className="sign-in-btn" onClick={handleLogout}>
-                Sign out
-              </button>
-            </>
-          ) : (
-            <button type="button" className="sign-in-btn" onClick={handleGoogleSignIn}>
-              Sign in
+return (
+<BrowserRouter>
+  <div
+    className="min-h-screen flex flex-col app-bg"
+    style={{ backgroundImage: "url('/background.jpeg')" }}
+  >
+    {/* ONE header */}
+    <header className="bg-white/95 backdrop-blur-sm shadow-md py-8 px-4 text-center relative">
+      {/* Top-right auth area */}
+      <div className="absolute top-4 right-4 flex items-center gap-3">
+        {user ? (
+          <>
+            <span className="text-sm text-gray-700 max-w-[220px] truncate">
+              {user.email}
+            </span>
+
+            {/* route-based profile navigation */}
+            <button
+              type="button"
+              onClick={() => (window.location.href = "/bookmarks")}
+              className="px-3 py-1.5 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:border-purple-500"
+            >
+              View profile
             </button>
-          )}
-        </div>
 
-        <h1 className="m-0 text-gray-800 text-4xl font-bold">Event Finder</h1>
-        <p className="mt-2 mb-0 text-gray-600 text-lg">
-          Discover events in your area with the click of a button
-        </p>
-      </header>
+            <button type="button" className="sign-in-btn" onClick={handleLogout}>
+              Sign out
+            </button>
+          </>
+        ) : (
+          <button type="button" className="sign-in-btn" onClick={handleGoogleSignIn}>
+            Sign in
+          </button>
+        )}
+      </div>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 flex flex-col gap-6">
-        {/* Entry point 1: Search UI + city filtering */}
-        <SearchPanel onSearch={handleSearch} loading={loading} />
+      <h1 className="m-0 text-gray-800 text-4xl font-bold">Event Finder</h1>
+      <p className="mt-2 mb-0 text-gray-600 text-lg">
+        Discover events in your area with the click of a button
+      </p>
+    </header>
 
-        {/* Entry point 2: Results display + categorization */}
-        <ResultsPanel events={events} loading={loading} error={error} />
-      </main>
+    <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 flex flex-col gap-6">
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <>
+              {/* Entry point 1: Search UI + city filtering */}
+              <SearchPanel onSearch={handleSearch} loading={loading} />
 
-      <footer className="bg-white/95 backdrop-blur-sm py-6 px-4 text-center text-gray-600 mt-auto">
-        <p className="m-0">Event Finder - Find events in your area</p>
-      </footer>
-    </div>
-  );
+              {/* Entry point 2: Results display + categorization */}
+              <ResultsPanel events={events} loading={loading} error={error} />
+            </>
+          }
+        />
+
+        <Route
+          path="/bookmarks"
+          element={<ProfileBookmarksPage user={user} />}
+        />
+      </Routes>
+    </main>
+
+    <footer className="bg-white/95 backdrop-blur-sm py-6 px-4 text-center text-gray-600 mt-auto">
+      <p className="m-0">Event Finder - Find events in your area</p>
+    </footer>
+  </div>
+</BrowserRouter>
+);
 }
 
 export default App;
