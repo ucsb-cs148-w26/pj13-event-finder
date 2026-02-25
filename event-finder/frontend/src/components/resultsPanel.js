@@ -1,8 +1,20 @@
 // src/components/ResultsPanel.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import BookmarkStar from "./bookmarkStar";
+import EventCard from "../EventCard";
+import MapView from "../MapView";
 
-export default function ResultsPanel({ events, loading, error, user }) {
+export default function ResultsPanel({
+  events,
+  loading,
+  error,
+  user,
+  showPreciseLocationSplitView,
+  lastSearchArgs,
+  onBackToSearch,
+  selectedMarkerKey,
+  onMarkerClick,
+}) {
   const [keywordFilter, setKeywordFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -37,6 +49,53 @@ export default function ResultsPanel({ events, loading, error, user }) {
 
   const handlePreviousPage = () => setCurrentPage((p) => Math.max(1, p - 1));
   const handleNextPage = () => setCurrentPage((p) => Math.min(totalPages, p + 1));
+
+  // Precise location: split view (list left, map right)
+  if (showPreciseLocationSplitView && events.length > 0) {
+    const userLocation =
+      lastSearchArgs?.preciseLat != null && lastSearchArgs?.preciseLon != null
+        ? { lat: lastSearchArgs.preciseLat, lng: lastSearchArgs.preciseLon }
+        : null;
+    return (
+      <div className="split-results-container w-full max-w-[100%]">
+        <div className="split-results-left">
+          <div className="split-results-header">
+            <p className="m-0 text-gray-700 font-semibold">
+              {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""} found
+            </p>
+            <button type="button" onClick={onBackToSearch} className="back-to-search-btn">
+              Back to search
+            </button>
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Filter by keyword</label>
+            <input
+              type="text"
+              value={keywordFilter}
+              onChange={(e) => setKeywordFilter(e.target.value)}
+              placeholder="Search within results (event name, venue, location)..."
+              className="w-full px-4 py-2.5 bg-white/80 border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            />
+          </div>
+          <div className="split-events-list">
+            {filteredEvents.map((event) => (
+              <EventCard key={event.id} event={event} />
+            ))}
+          </div>
+        </div>
+        <div className="split-results-right">
+          <div className="map-panel">
+            <MapView
+              userLocation={userLocation}
+              events={filteredEvents}
+              selectedMarkerKey={selectedMarkerKey}
+              onMarkerClick={onMarkerClick}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6">
@@ -131,7 +190,7 @@ export default function ResultsPanel({ events, loading, error, user }) {
                           rel="noopener noreferrer"
                           className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline"
                         >
-                          View on {event.source} →
+                          View on {event.source || "Ticketmaster"} →
                         </a>
                       )}
                     </div>

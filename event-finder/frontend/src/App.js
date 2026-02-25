@@ -43,6 +43,8 @@ function App() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [lastSearchArgs, setLastSearchArgs] = useState(null);
+  const [selectedMarkerKey, setSelectedMarkerKey] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -69,9 +71,11 @@ function App() {
 
   // SearchPanel calls this with all search args; App does fetch + sets results
   const handleSearch = async (searchArgs) => {
+    setLastSearchArgs(searchArgs);
     setLoading(true);
     setError("");
     setEvents([]);
+    setSelectedMarkerKey(null);
 
     try {
       const params = new URLSearchParams();
@@ -154,6 +158,15 @@ function App() {
     }
   };
 
+  const showPreciseLocationSplitView =
+    lastSearchArgs?.usePreciseLocation && events.length > 0 && !loading && !error;
+
+  const handleBackToSearch = () => {
+    setEvents([]);
+    setError("");
+    setSelectedMarkerKey(null);
+  };
+
   return (
     <div
       className="min-h-screen flex flex-col app-bg"
@@ -195,17 +208,26 @@ function App() {
         </p>
       </header>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 flex flex-col gap-6">
+      <main className={`flex-1 w-full mx-auto px-4 py-8 flex flex-col gap-6 ${showPreciseLocationSplitView ? "max-w-[100%]" : "max-w-7xl"}`}>
         <Routes>
           <Route
             path="/"
             element={
               <>
-                {/* Entry point 1: Search UI + city filtering */}
-                <SearchPanel onSearch={handleSearch} loading={loading} />
-
-                {/* Entry point 2: Results display + categorization */}
-                <ResultsPanel events={events} loading={loading} error={error} user={user} />
+                {!showPreciseLocationSplitView && (
+                  <SearchPanel onSearch={handleSearch} loading={loading} />
+                )}
+                <ResultsPanel
+                  events={events}
+                  loading={loading}
+                  error={error}
+                  user={user}
+                  showPreciseLocationSplitView={showPreciseLocationSplitView}
+                  lastSearchArgs={lastSearchArgs}
+                  onBackToSearch={handleBackToSearch}
+                  selectedMarkerKey={selectedMarkerKey}
+                  onMarkerClick={setSelectedMarkerKey}
+                />
               </>
             }
           />

@@ -93,8 +93,11 @@ def search_events(
     
     
 @app.get("/api/events")
-def search_events(
-    location: str,
+def get_events(
+    location: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    radius: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     event_type: Optional[str] = None,
@@ -102,26 +105,31 @@ def search_events(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None
 ):
+    if lat is None and lon is None and not location:
+        return {"error": "Provide location (city, state) or lat and lon.", "events": []}
     tm_data = ticketmaster.fetch_events(
-        location=location,
+        location=location or "",
         start_date=start_date,
         end_date=end_date,
         event_type=event_type,
         category=category,
         min_price=min_price,
-        max_price=max_price
+        max_price=max_price,
+        lat=lat,
+        lon=lon,
+        radius=radius,
     )
-    
-    ae_data = allevents.fetch_events(
-        location=location,
-        start_date=start_date,
-        end_date=end_date,
-        event_type=event_type,
-        category=category,
-        min_price=min_price,
-        max_price=max_price
-    )
-    
+    ae_data = {"events": []}
+    if location:
+        ae_data = allevents.fetch_events(
+            location=location,
+            start_date=start_date,
+            end_date=end_date,
+            event_type=event_type,
+            category=category,
+            min_price=min_price,
+            max_price=max_price,
+        )
     combined_events = []
     seen_event_keys = set()
     tm_count = 0
