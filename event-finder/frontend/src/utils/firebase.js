@@ -4,15 +4,14 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-    apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-    authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-    projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-    appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "placeholder",
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "localhost",
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "placeholder",
+  appId: process.env.REACT_APP_FIREBASE_APP_ID || "placeholder",
 };
 
 const app = initializeApp(firebaseConfig);
-
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const db = getFirestore(app);
-googleProvider.setCustomParameters({ prompt: "select_account" }); // optional
+googleProvider.setCustomParameters({ prompt: "select_account" });

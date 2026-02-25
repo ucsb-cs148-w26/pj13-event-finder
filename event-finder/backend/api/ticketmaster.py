@@ -161,6 +161,10 @@ def fetch_events(
                 if "_embedded" in event and "venues" in event["_embedded"]:
                     venue = event["_embedded"]["venues"][0]
                     event_info["venue"] = venue.get("name", "")
+                    location_obj = venue.get("location", {})
+                    event_info["latitude"] = location_obj.get("latitude")
+                    event_info["longitude"] = location_obj.get("longitude")
+                    address = venue.get("address", {})
                     city = venue.get("city", {}).get("name", "")
                     state = venue.get("state", {}).get("stateCode", "")
                     event_info["location"] = f"{city}, {state}"
