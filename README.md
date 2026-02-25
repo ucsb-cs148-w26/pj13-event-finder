@@ -58,11 +58,13 @@ pip install -r requirements.txt
 ```
 install frontend dependencies
 ```
+cd frontend
 npm install
 ```
 
 # Functionality
 
+to start the frontend
 ```
 cd frontend
 npm start
