@@ -1,5 +1,7 @@
 // src/App.js
 import React, { useEffect, useState } from "react";
+import { Routes, Route } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
@@ -7,6 +9,7 @@ import { auth, googleProvider } from "./utils/firebase";
 
 import SearchPanel from "./components/searchPanel";
 import ResultsPanel from "./components/resultsPanel";
+import ProfileBookmarksPage from "./components/profileBookmarksPage";
 
 function ensureDateTimeDefaults({ startDate, endDate }) {
   let processedStartDate = startDate;
@@ -40,6 +43,10 @@ function App() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const onBookmarksPage = location.pathname === "/bookmarks";
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => setUser(u));
@@ -161,6 +168,16 @@ function App() {
               <span className="text-sm text-gray-700 max-w-[220px] truncate">
                 {user.email}
               </span>
+
+              {/* route-based profile navigation */}
+              <button
+                type="button"
+                onClick={() => navigate(onBookmarksPage ? "/" : "/bookmarks")}
+                className="..."
+              >
+                {onBookmarksPage ? "Back to home" : "View bookmarks"}
+              </button>
+
               <button type="button" className="sign-in-btn" onClick={handleLogout}>
                 Sign out
               </button>
@@ -179,11 +196,25 @@ function App() {
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 flex flex-col gap-6">
-        {/* Entry point 1: Search UI + city filtering */}
-        <SearchPanel onSearch={handleSearch} loading={loading} />
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <>
+                {/* Entry point 1: Search UI + city filtering */}
+                <SearchPanel onSearch={handleSearch} loading={loading} />
 
-        {/* Entry point 2: Results display + categorization */}
-        <ResultsPanel events={events} loading={loading} error={error} />
+                {/* Entry point 2: Results display + categorization */}
+                <ResultsPanel events={events} loading={loading} error={error} user={user} />
+              </>
+            }
+          />
+
+          <Route
+            path="/bookmarks"
+            element={<ProfileBookmarksPage user={user} />}
+          />
+        </Routes>
       </main>
 
       <footer className="bg-white/95 backdrop-blur-sm py-6 px-4 text-center text-gray-600 mt-auto">
