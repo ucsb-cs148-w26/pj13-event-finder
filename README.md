@@ -38,26 +38,42 @@ Obtain a TicketMaster API key from https://developer-acct.ticketmaster.com/user,
 
 ## Dependencies
 
-Backend: fastapi, uvicorn, requests, python-dotenv, httpx
+Backend: fastapi, uvicorn, requests, python-dotenv, httpx, openai, beautifulsoup4
 - These dependencies are to set up the API and enable it to fetch data from other APIs.
 Frontend: React, npm
 - These dependencies are simply to create an interactive and simple frontend able to present event info clearly.
 
 ## Installation Steps
 
-Backend: pip install -r requirements.txt
-Frontend: npm i
+For local deployment: 
+
+clone the repo
+```
+git clone https://github.com/ucsb-cs148-w26/pj13-event-finder
+```
+install backend dependencies
+```
+cd backend
+pip install -r requirements.txt
+```
+install frontend dependencies
+```
+npm install
+```
 
 # Functionality
 
-On Frontend terminal Run:
-- npm i
-- npm start
+```
+cd frontend
+npm start
+```
+on a separate terminal
+```
+cd backend
+uvicorn api.index:app --reload
+```
 
-On Backend terminal Run:
-- uvicorn api.index:app --reload
-
-Open frontend app in localhost given in terminal output.
+the app should be opened in `localhost:3000`
 
 # Known Problems
 
