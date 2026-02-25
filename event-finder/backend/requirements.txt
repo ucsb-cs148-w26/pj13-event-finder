@@ -5,4 +5,4 @@ python-dotenv
 httpx
 openai
 beautifulsoup4
-dateutil
+python-dateutil
