@@ -1,6 +1,7 @@
 // src/components/BookmarkStar.js
 import React, { useEffect, useMemo, useState } from "react";
-import { addBookmark, removeBookmark, subscribeToBookmarks } from "../utils/bookmarks";
+import { addBookmark, removeBookmark, subscribeToBookmark } from "../utils/bookmarks";
+import { sha256Base64Url } from "../utils/safeID";
 
 export default function BookmarkStar({ user, event, className = "" }) {
   const eventId = useMemo(
@@ -12,12 +13,27 @@ export default function BookmarkStar({ user, event, className = "" }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    setSaved(false);
-    if (!user) return;
-
-    const unsub = subscribeToBookmarks(user.uid, eventId, setSaved, console.error);
-    return () => unsub();
-  }, [user, eventId]);
+    let alive = true;
+  
+    (async () => {
+      const rawKey = String(event.id ?? event.eventId ?? event.url ?? event.name);
+      const safeEventId =
+        event.id || event.eventId
+          ? String(event.id ?? event.eventId)
+          : await sha256Base64Url(rawKey);
+  
+      if (!alive) return;
+      setSaved(false);
+      if (!user) return;
+  
+      const unsub = subscribeToBookmark(user.uid, safeEventId, setSaved, console.error);
+      return unsub;
+    })();
+  
+    return () => {
+      alive = false;
+    };
+  }, [user, event]);
 
   const toggle = async () => {
     if (!user) {

@@ -1,6 +1,7 @@
 // src/App.js
 import React, { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
@@ -42,6 +43,10 @@ function App() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const onBookmarksPage = location.pathname === "/bookmarks";
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => setUser(u));
@@ -149,76 +154,74 @@ function App() {
     }
   };
 
-return (
-<BrowserRouter>
-  <div
-    className="min-h-screen flex flex-col app-bg"
-    style={{ backgroundImage: "url('/background.jpeg')" }}
-  >
-    {/* ONE header */}
-    <header className="bg-white/95 backdrop-blur-sm shadow-md py-8 px-4 text-center relative">
-      {/* Top-right auth area */}
-      <div className="absolute top-4 right-4 flex items-center gap-3">
-        {user ? (
-          <>
-            <span className="text-sm text-gray-700 max-w-[220px] truncate">
-              {user.email}
-            </span>
-
-            {/* route-based profile navigation */}
-            <button
-              type="button"
-              onClick={() => (window.location.href = "/bookmarks")}
-              className="px-3 py-1.5 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:border-purple-500"
-            >
-              View bookmarks
-            </button>
-
-            <button type="button" className="sign-in-btn" onClick={handleLogout}>
-              Sign out
-            </button>
-          </>
-        ) : (
-          <button type="button" className="sign-in-btn" onClick={handleGoogleSignIn}>
-            Sign in
-          </button>
-        )}
-      </div>
-
-      <h1 className="m-0 text-gray-800 text-4xl font-bold">Event Finder</h1>
-      <p className="mt-2 mb-0 text-gray-600 text-lg">
-        Discover events in your area with the click of a button
-      </p>
-    </header>
-
-    <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 flex flex-col gap-6">
-      <Routes>
-        <Route
-          path="/"
-          element={
+  return (
+    <div
+      className="min-h-screen flex flex-col app-bg"
+      style={{ backgroundImage: "url('/background.jpeg')" }}
+    >
+      {/* ONE header */}
+      <header className="bg-white/95 backdrop-blur-sm shadow-md py-8 px-4 text-center relative">
+        {/* Top-right auth area */}
+        <div className="absolute top-4 right-4 flex items-center gap-3">
+          {user ? (
             <>
-              {/* Entry point 1: Search UI + city filtering */}
-              <SearchPanel onSearch={handleSearch} loading={loading} />
+              <span className="text-sm text-gray-700 max-w-[220px] truncate">
+                {user.email}
+              </span>
 
-              {/* Entry point 2: Results display + categorization */}
-              <ResultsPanel events={events} loading={loading} error={error} user={user} />
+              {/* route-based profile navigation */}
+              <button
+                type="button"
+                onClick={() => navigate(onBookmarksPage ? "/" : "/bookmarks")}
+                className="..."
+              >
+                {onBookmarksPage ? "Back to home" : "View bookmarks"}
+              </button>
+
+              <button type="button" className="sign-in-btn" onClick={handleLogout}>
+                Sign out
+              </button>
             </>
-          }
-        />
+          ) : (
+            <button type="button" className="sign-in-btn" onClick={handleGoogleSignIn}>
+              Sign in
+            </button>
+          )}
+        </div>
 
-        <Route
-          path="/bookmarks"
-          element={<ProfileBookmarksPage user={user} />}
-        />
-      </Routes>
-    </main>
+        <h1 className="m-0 text-gray-800 text-4xl font-bold">Event Finder</h1>
+        <p className="mt-2 mb-0 text-gray-600 text-lg">
+          Discover events in your area with the click of a button
+        </p>
+      </header>
 
-    <footer className="bg-white/95 backdrop-blur-sm py-6 px-4 text-center text-gray-600 mt-auto">
-      <p className="m-0">Event Finder - Find events in your area</p>
-    </footer>
-  </div>
-</BrowserRouter>
-);
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 flex flex-col gap-6">
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <>
+                {/* Entry point 1: Search UI + city filtering */}
+                <SearchPanel onSearch={handleSearch} loading={loading} />
+
+                {/* Entry point 2: Results display + categorization */}
+                <ResultsPanel events={events} loading={loading} error={error} user={user} />
+              </>
+            }
+          />
+
+          <Route
+            path="/bookmarks"
+            element={<ProfileBookmarksPage user={user} />}
+          />
+        </Routes>
+      </main>
+
+      <footer className="bg-white/95 backdrop-blur-sm py-6 px-4 text-center text-gray-600 mt-auto">
+        <p className="m-0">Event Finder - Find events in your area</p>
+      </footer>
+    </div>
+  );
 }
 
 export default App;

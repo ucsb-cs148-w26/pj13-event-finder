@@ -102,13 +102,6 @@ export default function ResultsPanel({ events, loading, error, user }) {
                         {/* Star in the top-right */}
                         <BookmarkStar user={user} event={event} className="absolute top-3 right-3" />
                     </div>
-                    {event.image && (
-                      <img
-                        src={event.image}
-                        alt={event.name}
-                        className="w-full h-48 object-cover bg-gray-200"
-                      />
-                    )}
                     <div className="p-6">
                       <h3 className="m-0 mb-3 text-gray-800 text-xl font-bold">
                         {event.name}
