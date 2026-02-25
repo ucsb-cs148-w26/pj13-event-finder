@@ -135,7 +135,7 @@ def search_events(
     for event in tm_data.get("events", []):
         key = get_event_key(event.get("name"), event.get("date"))
         if key not in seen_event_keys:
-            event["source"] = "ticketmaster"
+            event["source"] = "Ticketmaster"
             combined_events.append(event)
             seen_event_keys.add(key)
             tm_count += 1

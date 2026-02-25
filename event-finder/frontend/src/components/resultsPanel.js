@@ -131,7 +131,7 @@ export default function ResultsPanel({ events, loading, error, user }) {
                           rel="noopener noreferrer"
                           className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline"
                         >
-                          View on Ticketmaster →
+                          View on {event.source} →
                         </a>
                       )}
                     </div>
