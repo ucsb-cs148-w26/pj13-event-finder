@@ -113,6 +113,9 @@ export default function SearchPanel({ onSearch, loading }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usePreciseLocation]);
 
+  // Minimum datetime for date inputs (today, now) - prevents selecting past dates
+  const minDateTime = new Date().toISOString().slice(0, 16);
+
   const buildSearchArgs = () => ({
     // location
     usePreciseLocation,
@@ -252,6 +255,7 @@ export default function SearchPanel({ onSearch, loading }) {
                 id="start-date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
+                min={minDateTime}
                 required
                 className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
               />
@@ -268,6 +272,7 @@ export default function SearchPanel({ onSearch, loading }) {
                 id="end-date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
+                min={minDateTime}
                 required
                 className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
               />
