@@ -256,6 +256,7 @@ export default function SearchPanel({ onSearch, loading }) {
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 min={minDateTime}
+                max="9999-12-31T23:59"
                 required
                 className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
               />
@@ -273,6 +274,7 @@ export default function SearchPanel({ onSearch, loading }) {
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 min={minDateTime}
+                max="9999-12-31T23:59"
                 required
                 className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
               />
