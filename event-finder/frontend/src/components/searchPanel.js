@@ -113,8 +113,11 @@ export default function SearchPanel({ onSearch, loading }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usePreciseLocation]);
 
-  // Minimum datetime for date inputs (today, now) - prevents selecting past dates
-  const minDateTime = new Date().toISOString().slice(0, 16);
+  // Minimum datetime for date inputs - prevents selecting past *dates* (today or later),
+  // but allows any hour/minute on a valid date.
+  const todayIso = new Date().toISOString();
+  const todayDate = todayIso.slice(0, 10); // YYYY-MM-DD
+  const minDateTime = `${todayDate}T00:00`;
 
   const buildSearchArgs = () => ({
     // location
