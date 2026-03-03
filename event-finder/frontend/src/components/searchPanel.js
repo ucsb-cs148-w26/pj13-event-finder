@@ -114,9 +114,11 @@ export default function SearchPanel({ onSearch, loading }) {
   }, [usePreciseLocation]);
 
   // Minimum datetime for date inputs (today, now) - prevents selecting past dates, converted to local time
+  const pad2 = (n) => String(n).padStart(2, "0");
   const now = new Date();
-  const minDateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-
+  const todayDateLocal = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  const minDateTime = `${todayDateLocal}T00:00`;
+  
   const buildSearchArgs = () => ({
     // location
     usePreciseLocation,
@@ -250,6 +252,7 @@ export default function SearchPanel({ onSearch, loading }) {
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 min={minDateTime}
+                max="9999-12-31T23:59"
                 required
                 className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
               />
@@ -267,6 +270,7 @@ export default function SearchPanel({ onSearch, loading }) {
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 min={minDateTime}
+                max="9999-12-31T23:59"
                 required
                 className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
               />
