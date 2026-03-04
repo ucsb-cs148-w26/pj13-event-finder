@@ -237,7 +237,17 @@ function App() {
           )}
         </div>
 
-        <h1 className="m-0 text-gray-800 text-4xl font-bold">Event Finder</h1>
+        <h1
+          onClick={() => navigate("/")}
+          className="m-0 text-gray-800 text-4xl font-bold cursor-pointer select-none"
+          role="link"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") navigate("/");
+          }}
+        >
+          Event Finder
+        </h1>
         <p className="mt-2 mb-0 text-gray-600 text-lg">Find events in your area</p>
       </header>
 

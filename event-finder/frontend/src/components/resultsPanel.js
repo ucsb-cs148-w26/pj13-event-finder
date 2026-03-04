@@ -133,7 +133,7 @@ export default function ResultsPanel({
               />
             </div>
             <p className="m-0 text-sm text-gray-600 md:ml-4">
-              Showing <span className="font-semibold">{filteredEvents.length}</span> of{" "}
+              Showing <span className="font-semibold">{paginatedEvents.length}</span> of{" "}
               <span className="font-semibold">{events.length}</span> events
             </p>
           </div>
