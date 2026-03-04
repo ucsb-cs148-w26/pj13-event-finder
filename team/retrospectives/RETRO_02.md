@@ -1,6 +1,6 @@
 # Date of Retrospective: 02/18/26
 
-* Led by: Chris
+* Led by: Charles
 * Present: Chris, Aavash, Charles, Wendy, Whisper (all team present)
 * Absent: None
 
