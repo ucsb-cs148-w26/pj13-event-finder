@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
@@ -10,6 +10,7 @@ import { auth, googleProvider } from "./utils/firebase";
 import SearchPanel from "./components/searchPanel";
 import ResultsPanel from "./components/resultsPanel";
 import ProfileBookmarksPage from "./components/profileBookmarksPage";
+import MapView from "./MapView";
 
 function ensureDateTimeDefaults({ startDate, endDate }) {
   let processedStartDate = startDate;
@@ -45,10 +46,33 @@ function App() {
   const [error, setError] = useState("");
   const [lastSearchArgs, setLastSearchArgs] = useState(null);
   const [selectedMarkerKey, setSelectedMarkerKey] = useState(null);
+  const [locationPreview, setLocationPreview] = useState(null); // { lat, lng, radiusMiles } once we have coords; kept so preview map never unmounts
+  const [showMapPreview, setShowMapPreview] = useState(false); // true only when "search by location" is selected and coords available
   const location = useLocation();
   const navigate = useNavigate();
 
   const onBookmarksPage = location.pathname === "/bookmarks";
+
+  const handleLocationPreviewChange = useCallback((payload) => {
+    if (!payload) {
+      setLocationPreview(null);
+      setShowMapPreview(false);
+      return;
+    }
+    if (payload.show && payload.lat != null && payload.lng != null) {
+      setLocationPreview({
+        lat: payload.lat,
+        lng: payload.lng,
+        radiusMiles: payload.radiusMiles ?? 25,
+      });
+      setShowMapPreview(true);
+    } else {
+      setShowMapPreview(false);
+      if (payload.lat != null && payload.lng != null) {
+        setLocationPreview((prev) => ({ lat: payload.lat, lng: payload.lng, radiusMiles: payload.radiusMiles ?? prev?.radiusMiles ?? 25 }));
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => setUser(u));
@@ -118,10 +142,21 @@ function App() {
         params.append("location", locationString);
       }
 
-      // Dates
+      // Dates: when both empty, default to next 24 hours from now
+      const startDateArg = searchArgs.startDate?.trim();
+      const endDateArg = searchArgs.endDate?.trim();
+      let startDate = startDateArg;
+      let endDate = endDateArg;
+      if (!startDate && !endDate) {
+        const now = new Date();
+        const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        const pad = (n) => String(n).padStart(2, "0");
+        startDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        endDate = `${in24h.getFullYear()}-${pad(in24h.getMonth() + 1)}-${pad(in24h.getDate())}T${pad(in24h.getHours())}:${pad(in24h.getMinutes())}`;
+      }
       const { processedStartDate, processedEndDate } = ensureDateTimeDefaults({
-        startDate: searchArgs.startDate,
-        endDate: searchArgs.endDate,
+        startDate,
+        endDate,
       });
 
       if (processedStartDate) params.append("start_date", processedStartDate);
@@ -213,9 +248,7 @@ function App() {
         >
           Event Finder
         </h1>
-        <p className="mt-2 mb-0 text-gray-600 text-lg">
-          Discover events in your area with the click of a button
-        </p>
+        <p className="mt-2 mb-0 text-gray-600 text-lg">Find events in your area</p>
       </header>
 
       <main className={`flex-1 w-full mx-auto px-4 py-8 flex flex-col gap-6 ${showPreciseLocationSplitView ? "max-w-[100%]" : "max-w-7xl"}`}>
@@ -224,20 +257,46 @@ function App() {
             path="/"
             element={
               <>
-                {!showPreciseLocationSplitView && (
-                  <SearchPanel onSearch={handleSearch} loading={loading} />
+                <div
+                  className={
+                    showPreciseLocationSplitView
+                      ? "hidden"
+                      : locationPreview
+                        ? "flex w-full gap-6 items-stretch"
+                        : undefined
+                  }
+                >
+                  <SearchPanel onSearch={handleSearch} loading={loading} onLocationPreviewChange={handleLocationPreviewChange} />
+                  {locationPreview && (
+                    <div
+                      className={`flex-1 min-w-0 min-h-0 rounded-2xl overflow-hidden border border-white/20 shadow-xl self-stretch ${
+                        !showMapPreview || events.length > 0 || loading || error ? "hidden" : ""
+                      }`}
+                    >
+                      <MapView
+                        userLocation={locationPreview}
+                        events={[]}
+                        selectedMarkerKey={null}
+                        onMarkerClick={() => {}}
+                        searchRadiusMiles={locationPreview.radiusMiles ?? 25}
+                        containerVisible={showMapPreview && !(events.length > 0 || loading || error)}
+                      />
+                    </div>
+                  )}
+                </div>
+                {(events.length > 0 || loading || error) && (
+                  <ResultsPanel
+                    events={events}
+                    loading={loading}
+                    error={error}
+                    user={user}
+                    showPreciseLocationSplitView={showPreciseLocationSplitView}
+                    lastSearchArgs={lastSearchArgs}
+                    onBackToSearch={handleBackToSearch}
+                    selectedMarkerKey={selectedMarkerKey}
+                    onMarkerClick={setSelectedMarkerKey}
+                  />
                 )}
-                <ResultsPanel
-                  events={events}
-                  loading={loading}
-                  error={error}
-                  user={user}
-                  showPreciseLocationSplitView={showPreciseLocationSplitView}
-                  lastSearchArgs={lastSearchArgs}
-                  onBackToSearch={handleBackToSearch}
-                  selectedMarkerKey={selectedMarkerKey}
-                  onMarkerClick={setSelectedMarkerKey}
-                />
               </>
             }
           />
@@ -249,9 +308,6 @@ function App() {
         </Routes>
       </main>
 
-      <footer className="bg-white/95 backdrop-blur-sm py-6 px-4 text-center text-gray-600 mt-auto">
-        <p className="m-0">Event Finder - Find events in your area</p>
-      </footer>
     </div>
   );
 }

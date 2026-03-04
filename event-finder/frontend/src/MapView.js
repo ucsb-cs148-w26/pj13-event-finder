@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Circle } from '@react-google-maps/api';
 import EventCard from './EventCard';
 
 const mapContainerStyle = {
@@ -9,7 +9,9 @@ const mapContainerStyle = {
 
 const defaultCenter = { lat: 37.7749, lng: -122.4194 }; // San Francisco fallback
 
-function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick }) {
+const MILES_TO_METERS = 1609.344;
+
+function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, searchRadiusMiles }) {
   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey || '',
@@ -93,18 +95,33 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick }
       options={{ mapTypeControl: true, fullscreenControl: true, zoomControl: true }}
     >
       {userLocation && userLocation.lat != null && userLocation.lng != null && (
-        <Marker
-          position={{ lat: Number(userLocation.lat), lng: Number(userLocation.lng) }}
-          title="Your location"
-          icon={{
-            path: window.google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: '#4285F4',
-            fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: 2,
-          }}
-        />
+        <>
+          {searchRadiusMiles != null && Number(searchRadiusMiles) > 0 && (
+            <Circle
+              center={{ lat: Number(userLocation.lat), lng: Number(userLocation.lng) }}
+              radius={Number(searchRadiusMiles) * MILES_TO_METERS}
+              options={{
+                fillColor: '#4285F4',
+                fillOpacity: 0.15,
+                strokeColor: '#4285F4',
+                strokeOpacity: 0.5,
+                strokeWeight: 2,
+              }}
+            />
+          )}
+          <Marker
+            position={{ lat: Number(userLocation.lat), lng: Number(userLocation.lng) }}
+            title="Your location"
+            icon={{
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 10,
+              fillColor: '#4285F4',
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 2,
+            }}
+          />
+        </>
       )}
       {Array.from(locationGroups.entries()).map(([key, groupEvents]) => {
         const first = groupEvents[0];
