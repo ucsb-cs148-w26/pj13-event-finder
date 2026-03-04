@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Circle } from '@react-google-maps/api';
 import EventCard from './EventCard';
 
@@ -11,7 +11,9 @@ const defaultCenter = { lat: 37.7749, lng: -122.4194 }; // San Francisco fallbac
 
 const MILES_TO_METERS = 1609.344;
 
-function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, searchRadiusMiles }) {
+function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, searchRadiusMiles, useMyLocation = true, manualSearchCenter, onMapCenterChange, circleCenterOverride }) {
+  const mapRef = useRef(null);
+  const initialManualCenterRef = useRef(null);
   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey || '',
@@ -37,6 +39,9 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
 
   const mapCenter = useMemo(() => {
     const list = Array.isArray(events) ? events : [];
+    if (!useMyLocation && manualSearchCenter && manualSearchCenter.lat != null && manualSearchCenter.lng != null) {
+      return { lat: Number(manualSearchCenter.lat), lng: Number(manualSearchCenter.lng) };
+    }
     if (userLocation && userLocation.lat != null && userLocation.lng != null) {
       return { lat: Number(userLocation.lat), lng: Number(userLocation.lng) };
     }
@@ -45,7 +50,7 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
       return { lat: Number(firstEvent.latitude), lng: Number(firstEvent.longitude) };
     }
     return defaultCenter;
-  }, [userLocation, events]);
+  }, [userLocation, events, useMyLocation, manualSearchCenter]);
 
   const bounds = useMemo(() => {
     const list = Array.isArray(events) ? events : [];
@@ -69,7 +74,52 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
     };
   }, [userLocation, events]);
 
+  // When user switches to manual mode after map already loaded (e.g. unchecks "Use my location"),
+  // onLoad already ran with useMyLocation true so listeners were never attached. Attach them here.
+  useEffect(() => {
+    if (useMyLocation || !onMapCenterChange || !mapRef.current || !window.google) return;
+    const map = mapRef.current;
+    const reportCenter = () => {
+      const c = map.getCenter();
+      if (!c) return;
+      const lat = typeof c.lat === 'function' ? c.lat() : c.lat;
+      const lng = typeof c.lng === 'function' ? c.lng() : c.lng;
+      if (typeof lat === 'number' && typeof lng === 'number') {
+        onMapCenterChange({ lat, lng });
+      }
+    };
+    if (manualSearchCenter && manualSearchCenter.lat != null && manualSearchCenter.lng != null) {
+      map.setCenter(manualSearchCenter);
+    }
+    reportCenter();
+    const idleListener = map.addListener('idle', reportCenter);
+    const centerListener = map.addListener('center_changed', reportCenter);
+    return () => {
+      if (idleListener && idleListener.remove) idleListener.remove();
+      if (centerListener && centerListener.remove) centerListener.remove();
+    };
+  }, [useMyLocation, onMapCenterChange]);
+
   const onLoad = useCallback(map => {
+    mapRef.current = map;
+    if (!useMyLocation && onMapCenterChange) {
+      const reportCenter = () => {
+        const c = map.getCenter();
+        if (!c) return;
+        const lat = typeof c.lat === 'function' ? c.lat() : c.lat;
+        const lng = typeof c.lng === 'function' ? c.lng() : c.lng;
+        if (typeof lat === 'number' && typeof lng === 'number') {
+          onMapCenterChange({ lat, lng });
+        }
+      };
+      if (manualSearchCenter && manualSearchCenter.lat != null && manualSearchCenter.lng != null) {
+        map.setCenter(manualSearchCenter);
+      }
+      reportCenter();
+      map.addListener('idle', reportCenter);
+      map.addListener('center_changed', reportCenter);
+      return;
+    }
     if (bounds) {
       const gBounds = new window.google.maps.LatLngBounds(
         { lat: bounds.south, lng: bounds.west },
@@ -77,7 +127,7 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
       );
       map.fitBounds(gBounds, { top: 40, right: 40, bottom: 40, left: 40 });
     }
-  }, [bounds]);
+  }, [bounds, useMyLocation, onMapCenterChange, manualSearchCenter]);
 
   if (loadError) {
     return <div className="map-error">Error loading map. Check your API key.</div>;
@@ -86,29 +136,48 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
     return <div className="map-loading">Loading map...</div>;
   }
 
+  const circleCenter = (circleCenterOverride && circleCenterOverride.lat != null && circleCenterOverride.lng != null)
+    ? { lat: Number(circleCenterOverride.lat), lng: Number(circleCenterOverride.lng) }
+    : !useMyLocation && manualSearchCenter && manualSearchCenter.lat != null && manualSearchCenter.lng != null
+      ? { lat: Number(manualSearchCenter.lat), lng: Number(manualSearchCenter.lng) }
+      : userLocation && userLocation.lat != null && userLocation.lng != null
+        ? { lat: Number(userLocation.lat), lng: Number(userLocation.lng) }
+        : null;
+
+  const showUserMarker = useMyLocation && userLocation && userLocation.lat != null && userLocation.lng != null;
+
+  if (useMyLocation) {
+    initialManualCenterRef.current = null;
+  } else if (initialManualCenterRef.current == null) {
+    initialManualCenterRef.current = manualSearchCenter || (userLocation && userLocation.lat != null ? { lat: Number(userLocation.lat), lng: Number(userLocation.lng) } : null) || defaultCenter;
+  }
+  const initialCenterWhenManual = useMyLocation ? undefined : (initialManualCenterRef.current || defaultCenter);
+
   return (
-    <GoogleMap
-      mapContainerStyle={mapContainerStyle}
-      center={mapCenter}
-      zoom={10}
-      onLoad={onLoad}
-      options={{ mapTypeControl: true, fullscreenControl: true, zoomControl: true }}
-    >
-      {userLocation && userLocation.lat != null && userLocation.lng != null && (
-        <>
-          {searchRadiusMiles != null && Number(searchRadiusMiles) > 0 && (
-            <Circle
-              center={{ lat: Number(userLocation.lat), lng: Number(userLocation.lng) }}
-              radius={Number(searchRadiusMiles) * MILES_TO_METERS}
-              options={{
-                fillColor: '#4285F4',
-                fillOpacity: 0.15,
-                strokeColor: '#4285F4',
-                strokeOpacity: 0.5,
-                strokeWeight: 2,
-              }}
-            />
-          )}
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <GoogleMap
+        mapContainerStyle={mapContainerStyle}
+        center={useMyLocation ? mapCenter : undefined}
+        defaultCenter={initialCenterWhenManual}
+        defaultZoom={10}
+        zoom={useMyLocation ? 10 : undefined}
+        onLoad={onLoad}
+        options={{ mapTypeControl: true, fullscreenControl: true, zoomControl: true }}
+      >
+        {circleCenter && searchRadiusMiles != null && Number(searchRadiusMiles) > 0 && (
+          <Circle
+            center={circleCenter}
+            radius={Number(searchRadiusMiles) * MILES_TO_METERS}
+            options={{
+              fillColor: '#4285F4',
+              fillOpacity: 0.15,
+              strokeColor: '#4285F4',
+              strokeOpacity: 0.5,
+              strokeWeight: 2,
+            }}
+          />
+        )}
+        {showUserMarker && (
           <Marker
             position={{ lat: Number(userLocation.lat), lng: Number(userLocation.lng) }}
             title="Your location"
@@ -121,8 +190,7 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
               strokeWeight: 2,
             }}
           />
-        </>
-      )}
+        )}
       {Array.from(locationGroups.entries()).map(([key, groupEvents]) => {
         const first = groupEvents[0];
         const lat = Number(first.latitude);
@@ -159,6 +227,25 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
         );
       })}
     </GoogleMap>
+    {!useMyLocation && (
+      <div
+        style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%) rotate(-45deg)',
+          pointerEvents: 'none',
+          width: 28,
+          height: 28,
+          borderRadius: '50% 50% 50% 0',
+          background: '#4285F4',
+          border: '3px solid white',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+        }}
+        aria-hidden
+      />
+    )}
+    </div>
   );
 }
 

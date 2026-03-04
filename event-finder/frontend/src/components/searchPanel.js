@@ -18,6 +18,7 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
   const [endDate, setEndDate] = useState("");
 
   const [usePreciseLocation, setUsePreciseLocation] = useState(false);
+  const [useMyLocation, setUseMyLocation] = useState(true);
   const [preciseLat, setPreciseLat] = useState(null);
   const [preciseLon, setPreciseLon] = useState(null);
   const [preciseLocationError, setPreciseLocationError] = useState(null);
@@ -117,13 +118,13 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
   useEffect(() => {
     if (!onLocationPreviewChange) return;
     if (usePreciseLocation && preciseLat != null && preciseLon != null) {
-      onLocationPreviewChange({ show: true, lat: preciseLat, lng: preciseLon, radiusMiles: preciseRadius });
+      onLocationPreviewChange({ show: true, lat: preciseLat, lng: preciseLon, radiusMiles: preciseRadius, useMyLocation });
     } else if (preciseLat != null && preciseLon != null) {
-      onLocationPreviewChange({ show: false, lat: preciseLat, lng: preciseLon, radiusMiles: preciseRadius });
+      onLocationPreviewChange({ show: false, lat: preciseLat, lng: preciseLon, radiusMiles: preciseRadius, useMyLocation });
     } else {
       onLocationPreviewChange(null);
     }
-  }, [usePreciseLocation, preciseLat, preciseLon, preciseRadius, onLocationPreviewChange]);
+  }, [usePreciseLocation, preciseLat, preciseLon, preciseRadius, useMyLocation, onLocationPreviewChange]);
 
   // Minimum datetime for date inputs (today, now) - prevents selecting past dates, converted to local time
   const pad2 = (n) => String(n).padStart(2, "0");
@@ -144,6 +145,7 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
   const buildSearchArgs = () => ({
     // location
     usePreciseLocation,
+    useMyLocation,
     preciseLat,
     preciseLon,
     preciseRadius,
@@ -182,30 +184,45 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
       <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
         {/* Top row: switch on the far left in its own area */}
         <div className="flex flex-col gap-1.5 mb-4 pb-3 border-b border-gray-200/60">
-          <span className="text-sm font-semibold text-gray-700">Search By</span>
-          <div className="flex rounded-lg border border-gray-300 bg-gray-100/80 p-0.5 shrink-0 w-fit">
-            <button
-              type="button"
-              onClick={() => setUsePreciseLocation(false)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                !usePreciseLocation
-                  ? "bg-white text-purple-700 shadow-sm"
-                  : "text-gray-600 hover:text-gray-800"
-              }`}
-            >
-              City/State
-            </button>
-            <button
-              type="button"
-              onClick={() => setUsePreciseLocation(true)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                usePreciseLocation
-                  ? "bg-white text-purple-700 shadow-sm"
-                  : "text-gray-600 hover:text-gray-800"
-              }`}
-            >
-              Location
-            </button>
+          <div className="flex flex-wrap items-center gap-4">
+            <div>
+              <span className="text-sm font-semibold text-gray-700">Search By</span>
+              <div className="flex rounded-lg border border-gray-300 bg-gray-100/80 p-0.5 shrink-0 w-fit mt-1">
+                <button
+                  type="button"
+                  onClick={() => setUsePreciseLocation(false)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                    !usePreciseLocation
+                      ? "bg-white text-purple-700 shadow-sm"
+                      : "text-gray-600 hover:text-gray-800"
+                  }`}
+                >
+                  City/State
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUsePreciseLocation(true)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                    usePreciseLocation
+                      ? "bg-white text-purple-700 shadow-sm"
+                      : "text-gray-600 hover:text-gray-800"
+                  }`}
+                >
+                  Location
+                </button>
+              </div>
+            </div>
+            {usePreciseLocation && (
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={useMyLocation}
+                  onChange={(e) => setUseMyLocation(e.target.checked)}
+                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                />
+                <span className="font-medium">Use my location</span>
+              </label>
+            )}
           </div>
         </div>
 

@@ -48,6 +48,8 @@ function App() {
   const [selectedMarkerKey, setSelectedMarkerKey] = useState(null);
   const [locationPreview, setLocationPreview] = useState(null); // { lat, lng, radiusMiles } once we have coords; kept so preview map never unmounts
   const [showMapPreview, setShowMapPreview] = useState(false); // true only when "search by location" is selected and coords available
+  const [useMyLocationInPreview, setUseMyLocationInPreview] = useState(true);
+  const [manualSearchCenter, setManualSearchCenter] = useState(null); // { lat, lng } when "use my location" is unchecked; center of map viewport
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -65,13 +67,32 @@ function App() {
         lng: payload.lng,
         radiusMiles: payload.radiusMiles ?? 25,
       });
+      setUseMyLocationInPreview(payload.useMyLocation !== false);
+      if (payload.useMyLocation === false) {
+        setManualSearchCenter({ lat: payload.lat, lng: payload.lng });
+      } else {
+        setManualSearchCenter(null);
+      }
       setShowMapPreview(true);
+      setEvents([]);
+      setError("");
+      setLoading(false);
+      setSelectedMarkerKey(null);
     } else {
       setShowMapPreview(false);
       if (payload.lat != null && payload.lng != null) {
         setLocationPreview((prev) => ({ lat: payload.lat, lng: payload.lng, radiusMiles: payload.radiusMiles ?? prev?.radiusMiles ?? 25 }));
+        setUseMyLocationInPreview(payload.useMyLocation !== false);
+        if (payload.useMyLocation === false) {
+          setManualSearchCenter((prev) => prev || { lat: payload.lat, lng: payload.lng });
+        }
       }
     }
+  }, []);
+
+  const handleMapCenterChange = useCallback((center) => {
+    if (!center || typeof center.lat !== 'number' || typeof center.lng !== 'number') return;
+    setManualSearchCenter({ lat: center.lat, lng: center.lng });
   }, []);
 
   useEffect(() => {
@@ -106,27 +127,48 @@ function App() {
 
       // Location: precise vs city/state
       if (searchArgs.usePreciseLocation) {
-        if (
-          searchArgs.preciseLocationLoading ||
-          searchArgs.preciseLat == null ||
-          searchArgs.preciseLon == null
-        ) {
-          setError(
-            searchArgs.preciseLocationLoading
-              ? "Getting your location…"
-              : "Please allow location or enter city and state"
-          );
-          setLoading(false);
-          return;
-        }
-
         const radius =
           searchArgs.preciseRadius && Number(searchArgs.preciseRadius) > 0
             ? Number(searchArgs.preciseRadius)
             : 25;
 
-        params.append("lat", String(searchArgs.preciseLat));
-        params.append("lon", String(searchArgs.preciseLon));
+        const effectiveLat = searchArgs.useMyLocation
+          ? searchArgs.preciseLat
+          : manualSearchCenter?.lat;
+        const effectiveLon = searchArgs.useMyLocation
+          ? searchArgs.preciseLon
+          : manualSearchCenter?.lng;
+
+        if (searchArgs.useMyLocation) {
+          if (
+            searchArgs.preciseLocationLoading ||
+            searchArgs.preciseLat == null ||
+            searchArgs.preciseLon == null
+          ) {
+            setError(
+              searchArgs.preciseLocationLoading
+                ? "Getting your location…"
+                : "Please allow location or enter city and state"
+            );
+            setLoading(false);
+            return;
+          }
+          params.append("lat", String(searchArgs.preciseLat));
+          params.append("lon", String(searchArgs.preciseLon));
+        } else {
+          if (!manualSearchCenter || manualSearchCenter.lat == null || manualSearchCenter.lng == null) {
+            setError("Please position the map to set the search center.");
+            setLoading(false);
+            return;
+          }
+          params.append("lat", String(manualSearchCenter.lat));
+          params.append("lon", String(manualSearchCenter.lng));
+        }
+        setLastSearchArgs({
+          ...searchArgs,
+          searchCenterLat: effectiveLat != null ? Number(effectiveLat) : undefined,
+          searchCenterLon: effectiveLon != null ? Number(effectiveLon) : undefined,
+        });
         params.append("radius", String(radius));
       } else {
         const locationString =
@@ -280,6 +322,9 @@ function App() {
                         onMarkerClick={() => {}}
                         searchRadiusMiles={locationPreview.radiusMiles ?? 25}
                         containerVisible={showMapPreview && !(events.length > 0 || loading || error)}
+                        useMyLocation={useMyLocationInPreview}
+                        manualSearchCenter={manualSearchCenter}
+                        onMapCenterChange={handleMapCenterChange}
                       />
                     </div>
                   )}

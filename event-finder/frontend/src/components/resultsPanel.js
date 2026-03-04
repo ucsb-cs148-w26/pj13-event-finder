@@ -56,6 +56,10 @@ export default function ResultsPanel({
       lastSearchArgs?.preciseLat != null && lastSearchArgs?.preciseLon != null
         ? { lat: lastSearchArgs.preciseLat, lng: lastSearchArgs.preciseLon }
         : null;
+    const circleCenterOverride =
+      lastSearchArgs?.searchCenterLat != null && lastSearchArgs?.searchCenterLon != null
+        ? { lat: lastSearchArgs.searchCenterLat, lng: lastSearchArgs.searchCenterLon }
+        : null;
     return (
       <div className="split-results-container w-full max-w-[100%]">
         <div className="split-results-left">
@@ -91,6 +95,7 @@ export default function ResultsPanel({
               selectedMarkerKey={selectedMarkerKey}
               onMarkerClick={onMarkerClick}
               searchRadiusMiles={lastSearchArgs?.preciseRadius}
+              circleCenterOverride={circleCenterOverride}
             />
           </div>
         </div>
