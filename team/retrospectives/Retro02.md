@@ -43,5 +43,6 @@ Communicate with everyone well.
 * A brief description of what constitutes your change/experiment
 We've noticed a rising number of bugs now that we have more features that interact with eachother in our codebase.
 * A brief assessment of how its results (did it improve things? move the needle at all?)
-
+This definitely helped things. We had less features pushed due to more testing, but there have been much less issues in the deployed codebase, which has made developing futher features a lot more seamless.
 * A decision going forward: keep the change, revert to previous procedure, make a new change? 
+Keep the change, and know that we will get better and better at debugging our code.
