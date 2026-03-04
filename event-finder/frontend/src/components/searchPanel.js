@@ -125,11 +125,11 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
     }
   }, [usePreciseLocation, preciseLat, preciseLon, preciseRadius, onLocationPreviewChange]);
 
-  // Minimum datetime for date inputs - prevents selecting past *dates* (today or later),
-  // but allows any hour/minute on a valid date.
-  const todayIso = new Date().toISOString();
-  const todayDate = todayIso.slice(0, 10); // YYYY-MM-DD
-  const minDateTime = `${todayDate}T00:00`;
+  // Minimum datetime for date inputs (today, now) - prevents selecting past dates, converted to local time
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const now = new Date();
+  const todayDateLocal = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  const minDateTime = `${todayDateLocal}T00:00`;
 
   const getDefaultDateRange = () => {
     const now = new Date();
