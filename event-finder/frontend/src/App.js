@@ -12,6 +12,17 @@ import ResultsPanel from "./components/resultsPanel";
 import ProfileBookmarksPage from "./components/profileBookmarksPage";
 import MapView from "./MapView";
 
+function add24HoursToDateTime(dateTimeStr) {
+  if (!dateTimeStr?.trim()) return null;
+  const s = dateTimeStr.trim();
+  const hasTime = s.includes("T");
+  const date = new Date(hasTime ? s : s + "T00:00");
+  if (isNaN(date.getTime())) return null;
+  const next = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}T${pad(next.getHours())}:${pad(next.getMinutes())}`;
+}
+
 function ensureDateTimeDefaults({ startDate, endDate }) {
   let processedStartDate = startDate;
   let processedEndDate = endDate;
@@ -49,7 +60,8 @@ function App() {
   const [locationPreview, setLocationPreview] = useState(null); // { lat, lng, radiusMiles } once we have coords; kept so preview map never unmounts
   const [showMapPreview, setShowMapPreview] = useState(false); // true only when "search by location" is selected and coords available
   const [useMyLocationInPreview, setUseMyLocationInPreview] = useState(true);
-  const [manualSearchCenter, setManualSearchCenter] = useState(null); // { lat, lng } when "use my location" is unchecked; center of map viewport
+  const [manualSearchCenter, setManualSearchCenter] = useState(null); // { lat, lng } when "select location" is used and user has placed pin
+  const [isSelectingLocationOnMap, setIsSelectingLocationOnMap] = useState(false); // true when waiting for user to click on map to place pin
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -57,8 +69,9 @@ function App() {
 
   const handleLocationPreviewChange = useCallback((payload) => {
     if (!payload) {
-      setLocationPreview(null);
+      // Keep locationPreview so the map stays mounted (avoid remount when switching to city/state and back)
       setShowMapPreview(false);
+      setIsSelectingLocationOnMap(false);
       return;
     }
     if (payload.show && payload.lat != null && payload.lng != null) {
@@ -69,9 +82,16 @@ function App() {
       });
       setUseMyLocationInPreview(payload.useMyLocation !== false);
       if (payload.useMyLocation === false) {
-        setManualSearchCenter({ lat: payload.lat, lng: payload.lng });
+        if (payload.startSelectingLocation) {
+          setIsSelectingLocationOnMap(true);
+          setManualSearchCenter(null);
+        } else {
+          setManualSearchCenter((prev) => prev ?? { lat: payload.lat, lng: payload.lng });
+          setIsSelectingLocationOnMap(false);
+        }
       } else {
         setManualSearchCenter(null);
+        setIsSelectingLocationOnMap(false);
       }
       setShowMapPreview(true);
       setEvents([]);
@@ -83,16 +103,20 @@ function App() {
       if (payload.lat != null && payload.lng != null) {
         setLocationPreview((prev) => ({ lat: payload.lat, lng: payload.lng, radiusMiles: payload.radiusMiles ?? prev?.radiusMiles ?? 25 }));
         setUseMyLocationInPreview(payload.useMyLocation !== false);
-        if (payload.useMyLocation === false) {
+        if (payload.useMyLocation === false && payload.startSelectingLocation) {
+          setIsSelectingLocationOnMap(true);
+          setManualSearchCenter(null);
+        } else if (payload.useMyLocation === false) {
           setManualSearchCenter((prev) => prev || { lat: payload.lat, lng: payload.lng });
+          setIsSelectingLocationOnMap(false);
         }
       }
     }
   }, []);
 
-  const handleMapCenterChange = useCallback((center) => {
-    if (!center || typeof center.lat !== 'number' || typeof center.lng !== 'number') return;
-    setManualSearchCenter({ lat: center.lat, lng: center.lng });
+  const handleMapLocationSelected = useCallback((lat, lng) => {
+    setManualSearchCenter({ lat, lng });
+    setIsSelectingLocationOnMap(false);
   }, []);
 
   useEffect(() => {
@@ -195,6 +219,12 @@ function App() {
         const pad = (n) => String(n).padStart(2, "0");
         startDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
         endDate = `${in24h.getFullYear()}-${pad(in24h.getMonth() + 1)}-${pad(in24h.getDate())}T${pad(in24h.getHours())}:${pad(in24h.getMinutes())}`;
+      } else if (startDate && !endDate) {
+        endDate = add24HoursToDateTime(startDate);
+      } else if (!startDate && endDate) {
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, "0");
+        startDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
       }
       const { processedStartDate, processedEndDate } = ensureDateTimeDefaults({
         startDate,
@@ -301,35 +331,87 @@ function App() {
               <>
                 <div
                   className={
-                    showPreciseLocationSplitView
-                      ? "hidden"
-                      : locationPreview
-                        ? "flex w-full gap-6 items-stretch"
-                        : undefined
+                    locationPreview && (showMapPreview || showPreciseLocationSplitView)
+                      ? showPreciseLocationSplitView
+                        ? "split-results-container w-full max-w-[100%]"
+                        : "flex w-full gap-6 items-stretch"
+                      : undefined
                   }
                 >
-                  <SearchPanel onSearch={handleSearch} loading={loading} onLocationPreviewChange={handleLocationPreviewChange} />
+                  <div
+                    className={locationPreview && (showMapPreview || showPreciseLocationSplitView) ? "flex-shrink-0 min-w-0" : ""}
+                    style={{
+                      display: showPreciseLocationSplitView && (events.length > 0 || loading || error) ? "none" : "block",
+                      flex: locationPreview && (showMapPreview || showPreciseLocationSplitView) ? "0 1 auto" : 1,
+                      minWidth: locationPreview && (showMapPreview || showPreciseLocationSplitView) ? 420 : undefined,
+                      maxWidth: locationPreview && (showMapPreview || showPreciseLocationSplitView) ? "50%" : undefined,
+                    }}
+                  >
+                    <SearchPanel
+                      onSearch={handleSearch}
+                      loading={loading}
+                      onLocationPreviewChange={handleLocationPreviewChange}
+                      isSelectingLocationOnMap={isSelectingLocationOnMap}
+                      hasSelectedLocation={!useMyLocationInPreview && !!manualSearchCenter}
+                      onReselectLocation={() => {
+                        setIsSelectingLocationOnMap(true);
+                        setManualSearchCenter(null);
+                      }}
+                      fullWidthInLayout={!!(locationPreview && (showMapPreview || showPreciseLocationSplitView))}
+                    />
+                  </div>
+                  {showPreciseLocationSplitView && (events.length > 0 || loading || error) && (
+                    <ResultsPanel
+                      events={events}
+                      loading={loading}
+                      error={error}
+                      user={user}
+                      showPreciseLocationSplitView={showPreciseLocationSplitView}
+                      lastSearchArgs={lastSearchArgs}
+                      onBackToSearch={handleBackToSearch}
+                      selectedMarkerKey={selectedMarkerKey}
+                      onMarkerClick={setSelectedMarkerKey}
+                      listOnly
+                    />
+                  )}
                   {locationPreview && (
                     <div
                       className={`flex-1 min-w-0 min-h-0 rounded-2xl overflow-hidden border border-white/20 shadow-xl self-stretch ${
-                        !showMapPreview || events.length > 0 || loading || error ? "hidden" : ""
-                      }`}
+                        showPreciseLocationSplitView ? "split-results-right" : ""
+                      } ${!showMapPreview ? "hidden" : ""}`}
                     >
                       <MapView
-                        userLocation={locationPreview}
-                        events={[]}
-                        selectedMarkerKey={null}
-                        onMarkerClick={() => {}}
+                        userLocation={
+                          showPreciseLocationSplitView &&
+                          lastSearchArgs?.preciseLat != null &&
+                          lastSearchArgs?.preciseLon != null
+                            ? { lat: lastSearchArgs.preciseLat, lng: lastSearchArgs.preciseLon }
+                            : locationPreview
+                        }
+                        events={showPreciseLocationSplitView ? events : []}
+                        selectedMarkerKey={showPreciseLocationSplitView ? selectedMarkerKey : null}
+                        onMarkerClick={showPreciseLocationSplitView ? setSelectedMarkerKey : () => {}}
                         searchRadiusMiles={locationPreview.radiusMiles ?? 25}
-                        containerVisible={showMapPreview && !(events.length > 0 || loading || error)}
+                        containerVisible={showMapPreview}
                         useMyLocation={useMyLocationInPreview}
                         manualSearchCenter={manualSearchCenter}
-                        onMapCenterChange={handleMapCenterChange}
+                        isSelectingLocation={!showPreciseLocationSplitView && isSelectingLocationOnMap}
+                        onLocationSelected={showPreciseLocationSplitView ? undefined : handleMapLocationSelected}
+                        circleCenterOverride={
+                          showPreciseLocationSplitView &&
+                          lastSearchArgs?.searchCenterLat != null &&
+                          lastSearchArgs?.searchCenterLon != null
+                            ? {
+                                lat: lastSearchArgs.searchCenterLat,
+                                lng: lastSearchArgs.searchCenterLon,
+                              }
+                            : undefined
+                        }
                       />
                     </div>
                   )}
                 </div>
-                {(events.length > 0 || loading || error) && (
+                {(events.length > 0 || loading || error) && !showPreciseLocationSplitView && (
                   <ResultsPanel
                     events={events}
                     loading={loading}
