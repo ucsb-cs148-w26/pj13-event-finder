@@ -378,22 +378,23 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
         </div>
 
         {/* Popular Cities Chips */}
-        <div className="mt-4 pt-4 border-t border-gray-200/50">
-          <p className="text-xs text-gray-500 mb-2 font-medium">Popular Cities:</p>
-          <div className="flex flex-wrap gap-2">
-            {POPULAR_CITIES.map((item, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handlePopularCityClick(item.city, item.state)}
-                className="px-3 py-1 text-xs bg-white/60 hover:bg-white/80 border border-gray-200 rounded-full text-gray-700 hover:text-purple-700 transition-all font-medium"
-              >
-                {item.city}, {item.state}
-              </button>
-            ))}
+        {!usePreciseLocation && (
+          <div className="mt-4 pt-4 border-t border-gray-200/50">
+            <p className="text-xs text-gray-500 mb-2 font-medium">Popular Cities:</p>
+            <div className="flex flex-wrap gap-2">
+              {POPULAR_CITIES.map((item, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handlePopularCityClick(item.city, item.state)}
+                  className="px-3 py-1 text-xs bg-white/60 hover:bg-white/80 border border-gray-200 rounded-full text-gray-700 hover:text-purple-700 transition-all font-medium"
+                >
+                  {item.city}, {item.state}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-
+        )}
         {/* Additional Options */}
         <div className="mt-4 flex flex-col gap-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
