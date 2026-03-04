@@ -4,6 +4,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from api.llm_router import route_and_fetch_events
 from api import ticketmaster, allevents
+from api.open_scraper import find_event_site_url, scrape_events_from_url
 
 load_dotenv()
 
@@ -172,3 +173,35 @@ def get_direct_events(location: str):
     Usage: /api/direct-events?location=New York
     """
     return allevents.fetch_events(location=location)
+
+@app.get("/api/open_scrape")
+def find(prompt: str):
+    """
+    Basic open-ended LLM query using the configured model.
+    Usage: /api/query?prompt=What is the capital of France?
+    """
+    
+@app.get("/api/scrape-events")
+def scrape_events(location: str):
+    """
+    Finds the official event site URL for a given location, then scrapes 
+    that URL and uses the LLM to extract structured event data.
+    Usage: /api/scrape-events?location=santa barbara
+    """
+    site_info = find_event_site_url(location)
+    
+    if "error" in site_info:
+        return site_info
+        
+    url = site_info.get("url")
+    if not url:
+        return {"error": f"Could not find an official event site URL for '{location}'."}
+
+    # 2. Scrape the URL we just found
+    scrape_result = scrape_events_from_url(url, location)
+    
+    # Attach the found URL to the final output for reference
+    if "error" not in scrape_result:
+        scrape_result["source_url"] = url
+        
+    return scrape_result
