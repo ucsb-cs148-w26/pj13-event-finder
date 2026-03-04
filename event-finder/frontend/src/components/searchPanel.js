@@ -6,7 +6,7 @@ import { US_STATES, CITIES_BY_STATE, POPULAR_CITIES } from "../utils/locationDat
  * SearchPanel owns ONLY search UI state.
  * When the user submits, it calls onSearch({ ...searchArgs }) and lets App do the fetch.
  */
-export default function SearchPanel({ onSearch, loading }) {
+export default function SearchPanel({ onSearch, loading, onLocationPreviewChange }) {
   const [stateQuery, setStateQuery] = useState("");
   const [selectedState, setSelectedState] = useState("");
   const [showStateTypeahead, setShowStateTypeahead] = useState(false);
@@ -113,11 +113,33 @@ export default function SearchPanel({ onSearch, loading }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usePreciseLocation]);
 
+  // Notify parent: show=true when in location mode with coords; show=false when not (pass coords so App keeps map mounted and reuses it)
+  useEffect(() => {
+    if (!onLocationPreviewChange) return;
+    if (usePreciseLocation && preciseLat != null && preciseLon != null) {
+      onLocationPreviewChange({ show: true, lat: preciseLat, lng: preciseLon, radiusMiles: preciseRadius });
+    } else if (preciseLat != null && preciseLon != null) {
+      onLocationPreviewChange({ show: false, lat: preciseLat, lng: preciseLon, radiusMiles: preciseRadius });
+    } else {
+      onLocationPreviewChange(null);
+    }
+  }, [usePreciseLocation, preciseLat, preciseLon, preciseRadius, onLocationPreviewChange]);
+
   // Minimum datetime for date inputs - prevents selecting past *dates* (today or later),
   // but allows any hour/minute on a valid date.
   const todayIso = new Date().toISOString();
   const todayDate = todayIso.slice(0, 10); // YYYY-MM-DD
   const minDateTime = `${todayDate}T00:00`;
+
+  const getDefaultDateRange = () => {
+    const now = new Date();
+    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const pad = (n) => String(n).padStart(2, "0");
+    return {
+      startDate: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`,
+      endDate: `${in24h.getFullYear()}-${pad(in24h.getMonth() + 1)}-${pad(in24h.getDate())}T${pad(in24h.getHours())}:${pad(in24h.getMinutes())}`,
+    };
+  };
 
   const buildSearchArgs = () => ({
     // location
@@ -139,112 +161,184 @@ export default function SearchPanel({ onSearch, loading }) {
 
   const onSubmit = (e) => {
     e.preventDefault();
-    onSearch(buildSearchArgs());
+    const start = startDate?.trim();
+    const end = endDate?.trim();
+    let args = buildSearchArgs();
+    if (!start && !end) {
+      const defaults = getDefaultDateRange();
+      args = { ...args, startDate: defaults.startDate, endDate: defaults.endDate };
+      setStartDate(defaults.startDate);
+      setEndDate(defaults.endDate);
+    }
+    onSearch(args);
   };
 
   return (
-    <form className="w-full max-w-6xl mx-auto" onSubmit={onSubmit}>
+    <form
+      className={`w-full ${usePreciseLocation ? "max-w-[50%] mr-auto" : "max-w-7xl mx-auto"}`}
+      onSubmit={onSubmit}
+    >
       {/* Glassmorphic Search Card */}
       <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
-        <div className="flex flex-col lg:flex-row gap-4 items-end">
-          {/* Location Group */}
-          <div className="flex-1 w-full">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Location *
-            </label>
-            <div className="flex gap-2">
-              {/* State Input */}
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  id="state"
-                  value={stateQuery}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setStateQuery(next);
-                    setSelectedState("");
-                    setCityQuery("");
-                    setShowStateTypeahead(true);
-                  }}
-                  onFocus={() => setShowStateTypeahead(true)}
-                  onBlur={() =>
-                    window.setTimeout(() => setShowStateTypeahead(false), 150)
-                  }
-                  placeholder="State name (e.g., California)"
-                  autoComplete="off"
-                  required={!usePreciseLocation}
-                  disabled={usePreciseLocation}
-                  className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium disabled:bg-gray-100 disabled:cursor-not-allowed"
-                />
-                {showStateTypeahead && stateResults.length > 0 && (
-                  <ul className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {stateResults.map((state) => (
-                      <li
-                        key={state}
-                        onMouseDown={() => {
-                          setSelectedState(state);
-                          setStateQuery(state);
-                          setShowStateTypeahead(false);
-                          setCityQuery("");
-                        }}
-                        className="px-4 py-2 hover:bg-purple-50 cursor-pointer text-gray-700"
-                      >
-                        {state}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+        {/* Top row: switch on the far left in its own area */}
+        <div className="flex flex-col gap-1.5 mb-4 pb-3 border-b border-gray-200/60">
+          <span className="text-sm font-semibold text-gray-700">Search By</span>
+          <div className="flex rounded-lg border border-gray-300 bg-gray-100/80 p-0.5 shrink-0 w-fit">
+            <button
+              type="button"
+              onClick={() => setUsePreciseLocation(false)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                !usePreciseLocation
+                  ? "bg-white text-purple-700 shadow-sm"
+                  : "text-gray-600 hover:text-gray-800"
+              }`}
+            >
+              City/State
+            </button>
+            <button
+              type="button"
+              onClick={() => setUsePreciseLocation(true)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                usePreciseLocation
+                  ? "bg-white text-purple-700 shadow-sm"
+                  : "text-gray-600 hover:text-gray-800"
+              }`}
+            >
+              Location
+            </button>
+          </div>
+        </div>
 
-              {/* City Input */}
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  id="city"
-                  value={cityQuery}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setCityQuery(next);
-                    setShowCityTypeahead(true);
-                  }}
-                  onFocus={() => setShowCityTypeahead(true)}
-                  onBlur={() =>
-                    window.setTimeout(() => setShowCityTypeahead(false), 150)
-                  }
-                  placeholder={selectedState ? `City in ${selectedState}` : "City name"}
-                  autoComplete="off"
-                  disabled={!selectedState || usePreciseLocation}
-                  required={!usePreciseLocation}
-                  className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:bg-gray-100 disabled:cursor-not-allowed font-medium"
-                />
-                {showCityTypeahead &&
-                  cityQuery.length >= 1 &&
-                  cityResults.length === 0 && (
-                    <div className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg px-4 py-2 text-gray-500 text-sm">
-                      No matching cities found.
-                    </div>
-                  )}
-                {showCityTypeahead && cityResults.length > 0 && (
-                  <ul className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {cityResults.map((cityName) => (
-                      <li
-                        key={`${selectedState}-${cityName}`}
-                        onMouseDown={() => {
-                          setCityQuery(cityName);
-                          setShowCityTypeahead(false);
-                        }}
-                        className="px-4 py-2 hover:bg-purple-50 cursor-pointer text-gray-700"
-                      >
-                        {`${cityName}, ${selectedState}`}
-                      </li>
+        <div
+          className={
+            usePreciseLocation
+              ? "flex flex-col gap-4"
+              : "flex flex-col lg:flex-row gap-4 items-end"
+          }
+        >
+          {/* Location Group: state/city or radius */}
+          <div className="flex-1 w-full">
+            {!usePreciseLocation ? (
+              <div className="flex gap-2">
+                {/* State Input */}
+                <div className="flex-1 flex flex-col">
+                  <label htmlFor="state" className="block text-sm font-semibold text-gray-700 mb-2">
+                    State
+                  </label>
+                  <div className="relative">
+                  <input
+                    type="text"
+                    id="state"
+                    value={stateQuery}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setStateQuery(next);
+                      setSelectedState("");
+                      setCityQuery("");
+                      setShowStateTypeahead(true);
+                    }}
+                    onFocus={() => setShowStateTypeahead(true)}
+                    onBlur={() =>
+                      window.setTimeout(() => setShowStateTypeahead(false), 150)
+                    }
+                    placeholder="State name (e.g., California)"
+                    autoComplete="off"
+                    required
+                    className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
+                  />
+                  {showStateTypeahead && stateResults.length > 0 && (
+                    <ul className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {stateResults.map((state) => (
+                        <li
+                          key={state}
+                          onMouseDown={() => {
+                            setSelectedState(state);
+                            setStateQuery(state);
+                            setShowStateTypeahead(false);
+                            setCityQuery("");
+                          }}
+                          className="px-4 py-2 hover:bg-purple-50 cursor-pointer text-gray-700"
+                        >
+                          {state}
+                        </li>
                     ))}
                   </ul>
                 )}
+                  </div>
+                </div>
+
+                {/* City Input */}
+                <div className="flex-1 flex flex-col">
+                  <label htmlFor="city" className="block text-sm font-semibold text-gray-700 mb-2">
+                    City
+                  </label>
+                  <div className="relative">
+                  <input
+                    type="text"
+                    id="city"
+                    value={cityQuery}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setCityQuery(next);
+                      setShowCityTypeahead(true);
+                    }}
+                    onFocus={() => setShowCityTypeahead(true)}
+                    onBlur={() =>
+                      window.setTimeout(() => setShowCityTypeahead(false), 150)
+                    }
+                    placeholder={selectedState ? `City in ${selectedState}` : "City name"}
+                    autoComplete="off"
+                    disabled={!selectedState}
+                    required
+                    className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:bg-gray-100 disabled:cursor-not-allowed font-medium"
+                  />
+                  {showCityTypeahead &&
+                    cityQuery.length >= 1 &&
+                    cityResults.length === 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg px-4 py-2 text-gray-500 text-sm">
+                        No matching cities found.
+                      </div>
+                    )}
+                  {showCityTypeahead && cityResults.length > 0 && (
+                    <ul className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {cityResults.map((cityName) => (
+                        <li
+                          key={`${selectedState}-${cityName}`}
+                          onMouseDown={() => {
+                            setCityQuery(cityName);
+                            setShowCityTypeahead(false);
+                          }}
+                          className="px-4 py-2 hover:bg-purple-50 cursor-pointer text-gray-700"
+                        >
+                          {`${cityName}, ${selectedState}`}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="w-full max-w-xs">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Radius (miles)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={preciseRadius}
+                  onChange={(e) =>
+                    setPreciseRadius(e.target.value ? Number(e.target.value) : "")
+                  }
+                  placeholder="e.g. 25"
+                  className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
+                />
+              </div>
+            )}
           </div>
 
-          {/* Date Range */}
+          {/* Date Range: on same row as location in city/state mode, on next line below radius in location mode */}
           <div className="flex flex-col sm:flex-row gap-2 flex-1 w-full">
             <div className="flex-1">
               <label
@@ -260,7 +354,6 @@ export default function SearchPanel({ onSearch, loading }) {
                 onChange={(e) => setStartDate(e.target.value)}
                 min={minDateTime}
                 max="9999-12-31T23:59"
-                required
                 className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
               />
             </div>
@@ -278,7 +371,6 @@ export default function SearchPanel({ onSearch, loading }) {
                 onChange={(e) => setEndDate(e.target.value)}
                 min={minDateTime}
                 max="9999-12-31T23:59"
-                required
                 className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium"
               />
             </div>
@@ -305,52 +397,21 @@ export default function SearchPanel({ onSearch, loading }) {
         {/* Additional Options */}
         <div className="mt-4 flex flex-col gap-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={usePreciseLocation}
-                  onChange={(e) => setUsePreciseLocation(e.target.checked)}
-                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                />
-                <span className="font-medium">Use My Precise Location</span>
-              </label>
-
-              {usePreciseLocation && (
-                <span className="text-sm text-gray-600">
-                  {preciseLocationLoading && "Getting location…"}
-                  {!preciseLocationLoading && preciseLocationError && (
-                    <span className="text-red-600"> {preciseLocationError}</span>
-                  )}
-                </span>
-              )}
-            </div>
-
+            {usePreciseLocation && (
+              <span className="text-sm text-gray-600">
+                {preciseLocationLoading && "Getting location…"}
+                {!preciseLocationLoading && preciseLocationError && (
+                  <span className="text-red-600"> {preciseLocationError}</span>
+                )}
+              </span>
+            )}
             <button
               type="button"
               onClick={() => setShowFilters(!showFilters)}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-transparent hover:bg-white/60 border border-gray-300 rounded-lg transition-all"
+              className="ml-auto px-4 py-2 text-sm font-medium text-gray-700 bg-transparent hover:bg-white/60 border border-gray-300 rounded-lg transition-all"
             >
               {showFilters ? "Hide" : "Show"} Filters
             </button>
-          </div>
-
-          <div className="w-full max-w-xs">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Radius (miles)
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={200}
-              value={preciseRadius}
-              onChange={(e) =>
-                setPreciseRadius(e.target.value ? Number(e.target.value) : "")
-              }
-              disabled={!usePreciseLocation}
-              placeholder="e.g. 25"
-              className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-medium disabled:bg-gray-100 disabled:cursor-not-allowed"
-            />
           </div>
         </div>
       </div>

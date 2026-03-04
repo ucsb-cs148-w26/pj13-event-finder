@@ -90,6 +90,7 @@ export default function ResultsPanel({
               events={filteredEvents}
               selectedMarkerKey={selectedMarkerKey}
               onMarkerClick={onMarkerClick}
+              searchRadiusMiles={lastSearchArgs?.preciseRadius}
             />
           </div>
         </div>
