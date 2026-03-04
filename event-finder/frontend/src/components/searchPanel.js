@@ -113,12 +113,12 @@ export default function SearchPanel({ onSearch, loading }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usePreciseLocation]);
 
-  // Minimum datetime for date inputs - prevents selecting past *dates* (today or later),
-  // but allows any hour/minute on a valid date.
-  const todayIso = new Date().toISOString();
-  const todayDate = todayIso.slice(0, 10); // YYYY-MM-DD
-  const minDateTime = `${todayDate}T00:00`;
-
+  // Minimum datetime for date inputs (today, now) - prevents selecting past dates, converted to local time
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const now = new Date();
+  const todayDateLocal = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  const minDateTime = `${todayDateLocal}T00:00`;
+  
   const buildSearchArgs = () => ({
     // location
     usePreciseLocation,
@@ -217,13 +217,6 @@ export default function SearchPanel({ onSearch, loading }) {
                   required={!usePreciseLocation}
                   className="w-full px-4 py-2.5 bg-transparent border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:bg-gray-100 disabled:cursor-not-allowed font-medium"
                 />
-                {showCityTypeahead &&
-                  cityQuery.length >= 1 &&
-                  cityResults.length === 0 && (
-                    <div className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg px-4 py-2 text-gray-500 text-sm">
-                      No matching cities found.
-                    </div>
-                  )}
                 {showCityTypeahead && cityResults.length > 0 && (
                   <ul className="absolute z-50 w-full mt-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                     {cityResults.map((cityName) => (
