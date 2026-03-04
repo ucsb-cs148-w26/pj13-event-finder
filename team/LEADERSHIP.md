@@ -24,4 +24,5 @@ Roles to assign
 
 - Deployment Document Coordinator. This person is responsible for the deployment documentation refactored in this lab, chiefly the document pointed to by ./docs/DEPLOY.md. By next week (lab08), they should ensure that there is a first version, and will be responsible for updating it throughout the rest of the quarter.
 
-Final presentation leader (week 9/10). This person will be in charge coordinating the final class presentation on Thu, 03/23. The presentation itself will likely have multiple presenters, but the leader ensures everyone is prepared and everything goes smoothly with demos and setup.
+- Final presentation leader (week 9/10). This person will be in charge coordinating the final class presentation on Thu, 03/23. The presentation itself will likely have multiple presenters, but the leader ensures everyone is prepared and everything goes smoothly with demos and setup.
+
