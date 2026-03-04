@@ -1,6 +1,6 @@
 # Date of Retrospective: 03/04/26
 
-* Led by: Chris
+* Led by: Chris, scribed by Wendy 
 * Present: Chris, Charles, Wendy
 * Absent: Aavash, Whisper (will add to and review with them in following class)
 
