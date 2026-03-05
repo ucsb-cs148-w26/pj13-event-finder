@@ -213,9 +213,9 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
     >
       {/* Glassmorphic Search Card */}
       <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
-        {/* Top row: switch on the far left in its own area */}
+        {/* Top row: Search By and (when Location) location source on same row */}
         <div className="flex flex-col gap-1.5 mb-4 pb-3 border-b border-gray-200/60">
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-row flex-wrap items-end gap-4 w-fit">
             <div>
               <span className="text-sm font-semibold text-gray-700">Search By</span>
               <div className="flex rounded-lg border border-gray-300 bg-gray-100/80 p-0.5 shrink-0 w-fit mt-1">
@@ -244,9 +244,9 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
               </div>
             </div>
             {usePreciseLocation && (
-              <div className="flex items-center gap-2">
+              <div>
                 <span className="text-sm font-semibold text-gray-700">Location</span>
-                <div className="flex rounded-lg border border-gray-300 bg-gray-100/80 p-0.5 shrink-0">
+                <div className="flex rounded-lg border border-gray-300 bg-gray-100/80 p-0.5 shrink-0 w-fit mt-1">
                   <button
                     type="button"
                     onClick={() => setUseMyLocation(true)}
