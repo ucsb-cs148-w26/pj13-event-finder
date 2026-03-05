@@ -164,10 +164,23 @@ def fetch_events(
                     location_obj = venue.get("location", {})
                     event_info["latitude"] = location_obj.get("latitude")
                     event_info["longitude"] = location_obj.get("longitude")
-                    address = venue.get("address", {})
-                    city = venue.get("city", {}).get("name", "")
-                    state = venue.get("state", {}).get("stateCode", "")
-                    event_info["location"] = f"{city}, {state}"
+                    address = venue.get("address", {}) or {}
+                    city = venue.get("city", {}).get("name", "") or (address.get("city") or "")
+                    state = (venue.get("state", {}).get("stateCode", "") or address.get("stateCode", "") or "").strip()
+                    postal = (address.get("postalCode") or "").strip()
+                    line1 = (address.get("line1") or "").strip()
+                    line2 = (address.get("line2") or "").strip()
+                    parts = [p for p in [line1, line2] if p]
+                    city_state = ", ".join(filter(None, [city, state]))
+                    if postal and city_state:
+                        city_state = f"{city_state} {postal}"
+                    elif postal:
+                        city_state = postal
+                    if parts:
+                        full_address = ", ".join(parts) + (f", {city_state}" if city_state else "")
+                    else:
+                        full_address = city_state or "Address not available"
+                    event_info["location"] = full_address
                 
                 if "images" in event and event["images"]:
                     event_info["image"] = event["images"][0].get("url", "")

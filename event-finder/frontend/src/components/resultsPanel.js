@@ -4,6 +4,19 @@ import BookmarkStar from "./bookmarkStar";
 import EventCard from "../EventCard";
 import MapView from "../MapView";
 
+/** Straight-line distance in miles (haversine) between two lat/lng points. */
+function distanceMiles(lat1, lon1, lat2, lon2) {
+  const R = 3959; // Earth radius in miles
+  const toRad = (x) => (x * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export default function ResultsPanel({
   events,
   loading,
@@ -53,6 +66,13 @@ export default function ResultsPanel({
 
   // Precise location split: list only (map is rendered by parent) or full split with map
   if (showPreciseLocationSplitView && events.length > 0) {
+    const centerLat =
+      lastSearchArgs?.searchCenterLat ?? lastSearchArgs?.preciseLat ?? null;
+    const centerLon =
+      lastSearchArgs?.searchCenterLon ?? lastSearchArgs?.preciseLon ?? null;
+    const hasCenter =
+      centerLat != null && centerLon != null && Number.isFinite(centerLat) && Number.isFinite(centerLon);
+
     const listContent = (
       <>
         <div className="split-results-header">
@@ -74,9 +94,23 @@ export default function ResultsPanel({
           />
         </div>
         <div className="split-events-list">
-          {filteredEvents.map((event) => (
-            <EventCard key={event.id} event={event} />
-          ))}
+          {filteredEvents.map((event) => {
+            const distMi =
+              hasCenter &&
+              event?.latitude != null &&
+              event?.longitude != null &&
+              Number.isFinite(Number(event.latitude)) &&
+              Number.isFinite(Number(event.longitude))
+                ? distanceMiles(centerLat, centerLon, Number(event.latitude), Number(event.longitude))
+                : null;
+            return (
+              <EventCard
+                key={event.id}
+                event={event}
+                distanceFromCenterMiles={distMi != null ? Math.round(distMi * 10) / 10 : undefined}
+              />
+            );
+          })}
         </div>
       </>
     );
