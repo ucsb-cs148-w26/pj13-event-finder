@@ -1,6 +1,6 @@
 import React from 'react';
 
-function EventCard({ event, compact }) {
+function EventCard({ event, compact, distanceFromCenterMiles }) {
   return (
     <div className={`bg-gray-50 rounded-lg border-2 border-gray-200 transition-all overflow-hidden flex flex-col hover:border-purple-500 hover:shadow-lg ${compact ? 'min-w-0 w-full max-w-full' : ''} ${compact ? '' : 'hover:-translate-y-1'}`}>
       {event.image && (
@@ -8,6 +8,9 @@ function EventCard({ event, compact }) {
       )}
       <div className={`${compact ? 'p-3 min-w-0' : 'p-6'}`}>
         <h3 className={`m-0 text-gray-800 font-bold break-words ${compact ? 'mb-1 text-base' : 'mb-3 text-xl'}`}>{event.name}</h3>
+        {distanceFromCenterMiles != null && (
+          <p className="m-2 text-gray-600 text-sm">📏 {distanceFromCenterMiles} mi from center</p>
+        )}
         {event.venue && (
           <p className="m-2 text-gray-600 text-sm">🏢 {event.venue}</p>
         )}
