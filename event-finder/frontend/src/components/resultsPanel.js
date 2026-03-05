@@ -7,7 +7,6 @@ import MapView from "../MapView";
 export default function ResultsPanel({
   events,
   loading,
-  progress,
   error,
   user,
   showPreciseLocationSplitView,
@@ -123,24 +122,7 @@ export default function ResultsPanel({
 
       {loading ? (
         <div className="text-center py-12 text-purple-600 text-lg">
-          <p>{(progress && progress.message) || "Loading events..."}</p>
-          <div className="mt-4 w-full max-w-md mx-auto bg-purple-100 rounded-full h-3 overflow-hidden">
-            <div
-              className="h-3 rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 transition-all duration-300"
-              style={{
-                width: `${
-                  progress && typeof progress.value === "number"
-                    ? Math.max(5, Math.min(100, progress.value))
-                    : 30
-                }%`,
-              }}
-            />
-          </div>
-          {progress && typeof progress.value === "number" && (
-            <p className="mt-2 text-sm text-purple-700 font-medium">
-              {Math.round(progress.value)}% complete
-            </p>
-          )}
+          <p>Loading events...</p>
         </div>
       ) : events.length === 0 && !error ? (
         <div className="text-center py-12 text-gray-600">

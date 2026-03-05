@@ -55,7 +55,6 @@ function App() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [progress, setProgress] = useState(null); // { value: number, message?: string }
   const [lastSearchArgs, setLastSearchArgs] = useState(null);
   const [selectedMarkerKey, setSelectedMarkerKey] = useState(null);
   const [locationPreview, setLocationPreview] = useState(null); // { lat, lng, radiusMiles } once we have coords; kept so preview map never unmounts
@@ -63,6 +62,8 @@ function App() {
   const [useMyLocationInPreview, setUseMyLocationInPreview] = useState(true);
   const [manualSearchCenter, setManualSearchCenter] = useState(null); // { lat, lng } when "select location" is used and user has placed pin
   const [isSelectingLocationOnMap, setIsSelectingLocationOnMap] = useState(false); // true when waiting for user to click on map to place pin
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [uploadInputText, setUploadInputText] = useState("");
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -145,7 +146,6 @@ function App() {
     setLoading(true);
     setError("");
     setEvents([]);
-    setProgress({ value: 5, message: "Starting search..." });
     setSelectedMarkerKey(null);
 
     try {
@@ -250,107 +250,20 @@ function App() {
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
-      // If the environment supports streaming (browser), consume the body as a stream
-      const reader = response.body && response.body.getReader ? response.body.getReader() : null;
+      const data = await response.json();
 
-      if (reader) {
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-
-          let newlineIndex;
-          while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
-            const line = buffer.slice(0, newlineIndex).trim();
-            buffer = buffer.slice(newlineIndex + 1);
-            if (!line) continue;
-
-            try {
-              const payload = JSON.parse(line);
-
-              if (typeof payload.progress === "number") {
-                setProgress({
-                  value: Math.max(0, Math.min(100, payload.progress)),
-                  message: payload.message || "",
-                });
-              }
-
-              if (payload.error) {
-                setError(payload.error);
-              }
-
-              if (Array.isArray(payload.events)) {
-                const nextEvents = payload.events || [];
-                setEvents(nextEvents);
-                if (nextEvents.length === 0 && !payload.error) {
-                  setError("No events found. Try adjusting your search criteria.");
-                }
-              }
-            } catch (parseErr) {
-              console.error("Failed to parse progress payload:", parseErr, line);
-            }
-          }
-        }
-
-        // Handle any remaining buffered JSON without a trailing newline (e.g., non-streaming envs)
-        const remaining = buffer.trim();
-        if (remaining) {
-          try {
-            const finalPayload = JSON.parse(remaining);
-            if (typeof finalPayload.progress === "number") {
-              setProgress({
-                value: Math.max(0, Math.min(100, finalPayload.progress)),
-                message: finalPayload.message || "",
-              });
-            }
-            if (finalPayload.error) {
-              setError(finalPayload.error);
-            }
-            if (Array.isArray(finalPayload.events)) {
-              const nextEvents = finalPayload.events || [];
-              setEvents(nextEvents);
-              if (nextEvents.length === 0 && !finalPayload.error) {
-                setError("No events found. Try adjusting your search criteria.");
-              }
-            }
-          } catch (parseErr) {
-            console.error("Failed to parse final payload:", parseErr, remaining);
-          }
-        }
+      if (data.error) {
+        setError(data.error);
       } else {
-        // Fallback for test environments or older browsers: treat as a single JSON response
-        const data = await response.json();
-        if (typeof data.progress === "number") {
-          setProgress({
-            value: Math.max(0, Math.min(100, data.progress)),
-            message: data.message || "",
-          });
-        }
-        if (data.error) {
-          setError(data.error);
-        } else {
-          const nextEvents = data.events || [];
-          setEvents(nextEvents);
-          if (nextEvents.length === 0) {
-            setError("No events found. Try adjusting your search criteria.");
-          }
-        }
+        const nextEvents = data.events || [];
+        setEvents(nextEvents);
+        if (nextEvents.length === 0) setError("No events found. Try adjusting your search criteria.");
       }
     } catch (err) {
       console.error("Search error:", err);
       setError(`Failed to search events: ${err.message}`);
     } finally {
       setLoading(false);
-      // Ensure progress ends at 100% once loading is finished (if we ever got any progress at all)
-      setProgress((prev) =>
-        prev && typeof prev.value === "number"
-          ? { ...prev, value: 100, message: prev.message || "Done" }
-          : prev
-      );
     }
   };
 
@@ -370,6 +283,15 @@ function App() {
     >
       {/* ONE header */}
       <header className="bg-white/95 backdrop-blur-sm shadow-md py-8 px-4 text-center relative">
+        {/* Top-left Upload button (only when signed in) */}
+        {user && (
+          <div className="absolute top-4 left-4 flex items-center">
+            <button type="button" className="sign-in-btn" onClick={() => setUploadModalOpen(true)}>
+              Upload URL
+            </button>
+          </div>
+        )}
+
         {/* Top-right auth area */}
         <div className="absolute top-4 right-4 flex items-center gap-3">
           {user ? (
@@ -411,6 +333,56 @@ function App() {
         </h1>
         <p className="mt-2 mb-0 text-gray-600 text-lg">Find events in your area</p>
       </header>
+
+      {/* Upload modal */}
+      {uploadModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setUploadModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="upload-modal-title"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="upload-modal-title" className="text-lg font-semibold text-gray-800 mt-0 mb-4">
+              Upload URL
+            </h2>
+            <input
+              type="text"
+              value={uploadInputText}
+              onChange={(e) => setUploadInputText(e.target.value)}
+              placeholder="Enter text..."
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 mb-4"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="sign-in-btn"
+                onClick={() => {
+                  setUploadModalOpen(false);
+                  setUploadInputText("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sign-in-btn"
+                onClick={() => {
+                  setUploadModalOpen(false);
+                  setUploadInputText("");
+                }}
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className={`flex-1 w-full mx-auto px-4 py-8 flex flex-col gap-6 ${showPreciseLocationSplitView ? "max-w-[100%]" : "max-w-7xl"}`}>
         <Routes>
@@ -504,7 +476,6 @@ function App() {
                   <ResultsPanel
                     events={events}
                     loading={loading}
-                    progress={progress}
                     error={error}
                     user={user}
                     showPreciseLocationSplitView={showPreciseLocationSplitView}
