@@ -12,6 +12,19 @@ const defaultCenter = { lat: 37.7749, lng: -122.4194 }; // San Francisco fallbac
 
 const MILES_TO_METERS = 1609.344;
 
+/** Straight-line distance in miles (haversine) between two lat/lng points. */
+function distanceMiles(lat1, lon1, lat2, lon2) {
+  const R = 3959;
+  const toRad = (x) => (x * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, searchRadiusMiles, useMyLocation = true, manualSearchCenter, circleCenterOverride, isSelectingLocation = false, onLocationSelected }) {
   const mapRef = useRef(null);
   const initialManualCenterRef = useRef(null);
@@ -224,14 +237,54 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
                   {groupEvents.length > 1 ? (
                     <div>
                       <p className="m-0 mb-2 text-sm font-semibold text-gray-700">{groupEvents.length} events at this location</p>
-                      {groupEvents.map(ev => (
-                        <div key={ev.id} className="mb-4 last:mb-0">
-                          <EventCard event={ev} compact />
-                        </div>
-                      ))}
+                      {groupEvents.map(ev => {
+                        const distMi =
+                          circleCenter &&
+                          ev?.latitude != null &&
+                          ev?.longitude != null &&
+                          Number.isFinite(Number(ev.latitude)) &&
+                          Number.isFinite(Number(ev.longitude))
+                            ? distanceMiles(
+                                circleCenter.lat,
+                                circleCenter.lng,
+                                Number(ev.latitude),
+                                Number(ev.longitude)
+                              )
+                            : null;
+                        return (
+                          <div key={ev.id} className="mb-4 last:mb-0">
+                            <EventCard
+                              event={ev}
+                              compact
+                              distanceFromCenterMiles={distMi != null ? Math.round(distMi * 10) / 10 : undefined}
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
-                    <EventCard event={first} compact />
+                    (() => {
+                      const distMi =
+                        circleCenter &&
+                        first?.latitude != null &&
+                        first?.longitude != null &&
+                        Number.isFinite(Number(first.latitude)) &&
+                        Number.isFinite(Number(first.longitude))
+                          ? distanceMiles(
+                              circleCenter.lat,
+                              circleCenter.lng,
+                              Number(first.latitude),
+                              Number(first.longitude)
+                            )
+                          : null;
+                      return (
+                        <EventCard
+                          event={first}
+                          compact
+                          distanceFromCenterMiles={distMi != null ? Math.round(distMi * 10) / 10 : undefined}
+                        />
+                      );
+                    })()
                   )}
                 </div>
               </InfoWindow>
