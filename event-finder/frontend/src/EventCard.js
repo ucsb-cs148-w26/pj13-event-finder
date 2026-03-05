@@ -9,7 +9,7 @@ function EventCard({ event, compact, distanceFromCenterMiles }) {
       <div className={`${compact ? 'p-3 min-w-0' : 'p-6'}`}>
         <h3 className={`m-0 text-gray-800 font-bold break-words ${compact ? 'mb-1 text-base' : 'mb-3 text-xl'}`}>{event.name}</h3>
         {distanceFromCenterMiles != null && (
-          <p className="m-2 text-gray-600 text-sm">📏 {distanceFromCenterMiles} mi from center</p>
+          <p className="m-2 text-gray-600 text-sm">📏 {distanceFromCenterMiles} miles from you</p>
         )}
         {event.venue && (
           <p className="m-2 text-gray-600 text-sm">🏢 {event.venue}</p>
