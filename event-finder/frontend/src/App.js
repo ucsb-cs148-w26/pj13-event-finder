@@ -287,7 +287,7 @@ function App() {
         {user && (
           <div className="absolute top-4 left-4 flex items-center">
             <button type="button" className="sign-in-btn" onClick={() => setUploadModalOpen(true)}>
-              Upload
+              Upload URL
             </button>
           </div>
         )}
