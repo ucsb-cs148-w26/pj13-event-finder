@@ -14,6 +14,7 @@ export default function ResultsPanel({
   onBackToSearch,
   selectedMarkerKey,
   onMarkerClick,
+  listOnly = false,
 }) {
   const [keywordFilter, setKeywordFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -50,8 +51,38 @@ export default function ResultsPanel({
   const handlePreviousPage = () => setCurrentPage((p) => Math.max(1, p - 1));
   const handleNextPage = () => setCurrentPage((p) => Math.min(totalPages, p + 1));
 
-  // Precise location: split view (list left, map right)
+  // Precise location split: list only (map is rendered by parent) or full split with map
   if (showPreciseLocationSplitView && events.length > 0) {
+    const listContent = (
+      <>
+        <div className="split-results-header">
+          <p className="m-0 text-gray-700 font-semibold">
+            {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""} found
+          </p>
+          <button type="button" onClick={onBackToSearch} className="back-to-search-btn">
+            Back to search
+          </button>
+        </div>
+        <div className="mb-4">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Filter by keyword</label>
+          <input
+            type="text"
+            value={keywordFilter}
+            onChange={(e) => setKeywordFilter(e.target.value)}
+            placeholder="Search within results (event name, venue, location)..."
+            className="w-full px-4 py-2.5 bg-white/80 border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+          />
+        </div>
+        <div className="split-events-list">
+          {filteredEvents.map((event) => (
+            <EventCard key={event.id} event={event} />
+          ))}
+        </div>
+      </>
+    );
+    if (listOnly) {
+      return <div className="split-results-left">{listContent}</div>;
+    }
     const userLocation =
       lastSearchArgs?.preciseLat != null && lastSearchArgs?.preciseLon != null
         ? { lat: lastSearchArgs.preciseLat, lng: lastSearchArgs.preciseLon }
@@ -62,31 +93,7 @@ export default function ResultsPanel({
         : null;
     return (
       <div className="split-results-container w-full max-w-[100%]">
-        <div className="split-results-left">
-          <div className="split-results-header">
-            <p className="m-0 text-gray-700 font-semibold">
-              {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""} found
-            </p>
-            <button type="button" onClick={onBackToSearch} className="back-to-search-btn">
-              Back to search
-            </button>
-          </div>
-          <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Filter by keyword</label>
-            <input
-              type="text"
-              value={keywordFilter}
-              onChange={(e) => setKeywordFilter(e.target.value)}
-              placeholder="Search within results (event name, venue, location)..."
-              className="w-full px-4 py-2.5 bg-white/80 border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-            />
-          </div>
-          <div className="split-events-list">
-            {filteredEvents.map((event) => (
-              <EventCard key={event.id} event={event} />
-            ))}
-          </div>
-        </div>
+        <div className="split-results-left">{listContent}</div>
         <div className="split-results-right">
           <div className="map-panel">
             <MapView

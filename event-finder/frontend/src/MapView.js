@@ -2,16 +2,17 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Circle } from '@react-google-maps/api';
 import EventCard from './EventCard';
 
-const mapContainerStyle = {
+const getMapContainerStyle = (isSelectingLocation) => ({
   width: '100%',
   height: '100%',
-};
+  ...(isSelectingLocation ? { cursor: 'crosshair' } : {}),
+});
 
 const defaultCenter = { lat: 37.7749, lng: -122.4194 }; // San Francisco fallback
 
 const MILES_TO_METERS = 1609.344;
 
-function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, searchRadiusMiles, useMyLocation = true, manualSearchCenter, onMapCenterChange, circleCenterOverride }) {
+function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, searchRadiusMiles, useMyLocation = true, manualSearchCenter, circleCenterOverride, isSelectingLocation = false, onLocationSelected }) {
   const mapRef = useRef(null);
   const initialManualCenterRef = useRef(null);
   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
@@ -74,50 +75,43 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
     };
   }, [userLocation, events]);
 
-  // When user switches to manual mode after map already loaded (e.g. unchecks "Use my location"),
-  // onLoad already ran with useMyLocation true so listeners were never attached. Attach them here.
+  // When in "select location" mode: listen for map click to place pin. When pin is placed: only set center, do not report center_changed (avoids refresh loop).
   useEffect(() => {
-    if (useMyLocation || !onMapCenterChange || !mapRef.current || !window.google) return;
+    if (!mapRef.current || !window.google) return;
     const map = mapRef.current;
-    const reportCenter = () => {
-      const c = map.getCenter();
-      if (!c) return;
-      const lat = typeof c.lat === 'function' ? c.lat() : c.lat;
-      const lng = typeof c.lng === 'function' ? c.lng() : c.lng;
-      if (typeof lat === 'number' && typeof lng === 'number') {
-        onMapCenterChange({ lat, lng });
-      }
-    };
-    if (manualSearchCenter && manualSearchCenter.lat != null && manualSearchCenter.lng != null) {
-      map.setCenter(manualSearchCenter);
+
+    if (isSelectingLocation && onLocationSelected) {
+      const clickListener = map.addListener('click', (e) => {
+        const lat = e.latLng && (typeof e.latLng.lat === 'function' ? e.latLng.lat() : e.latLng.lat);
+        const lng = e.latLng && (typeof e.latLng.lng === 'function' ? e.latLng.lng() : e.latLng.lng);
+        if (typeof lat === 'number' && typeof lng === 'number') {
+          onLocationSelected(lat, lng);
+        }
+      });
+      return () => { if (clickListener && clickListener.remove) clickListener.remove(); };
     }
-    reportCenter();
-    const idleListener = map.addListener('idle', reportCenter);
-    const centerListener = map.addListener('center_changed', reportCenter);
-    return () => {
-      if (idleListener && idleListener.remove) idleListener.remove();
-      if (centerListener && centerListener.remove) centerListener.remove();
-    };
-  }, [useMyLocation, onMapCenterChange]);
+
+    // Pin placed: center the map on the selected point once; pin is rendered as a Marker at that lat/lng (fixed on map)
+    if (!useMyLocation && manualSearchCenter && manualSearchCenter.lat != null && manualSearchCenter.lng != null) {
+      map.setCenter(manualSearchCenter);
+      return;
+    }
+  }, [useMyLocation, isSelectingLocation, onLocationSelected, manualSearchCenter]);
 
   const onLoad = useCallback(map => {
     mapRef.current = map;
-    if (!useMyLocation && onMapCenterChange) {
-      const reportCenter = () => {
-        const c = map.getCenter();
-        if (!c) return;
-        const lat = typeof c.lat === 'function' ? c.lat() : c.lat;
-        const lng = typeof c.lng === 'function' ? c.lng() : c.lng;
+    if (isSelectingLocation && onLocationSelected) {
+      const clickListener = map.addListener('click', (e) => {
+        const lat = e.latLng && (typeof e.latLng.lat === 'function' ? e.latLng.lat() : e.latLng.lat);
+        const lng = e.latLng && (typeof e.latLng.lng === 'function' ? e.latLng.lng() : e.latLng.lng);
         if (typeof lat === 'number' && typeof lng === 'number') {
-          onMapCenterChange({ lat, lng });
+          onLocationSelected(lat, lng);
         }
-      };
-      if (manualSearchCenter && manualSearchCenter.lat != null && manualSearchCenter.lng != null) {
-        map.setCenter(manualSearchCenter);
-      }
-      reportCenter();
-      map.addListener('idle', reportCenter);
-      map.addListener('center_changed', reportCenter);
+      });
+      return;
+    }
+    if (!useMyLocation && manualSearchCenter && manualSearchCenter.lat != null && manualSearchCenter.lng != null) {
+      map.setCenter(manualSearchCenter);
       return;
     }
     if (bounds) {
@@ -127,7 +121,7 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
       );
       map.fitBounds(gBounds, { top: 40, right: 40, bottom: 40, left: 40 });
     }
-  }, [bounds, useMyLocation, onMapCenterChange, manualSearchCenter]);
+  }, [bounds, useMyLocation, manualSearchCenter, isSelectingLocation, onLocationSelected]);
 
   if (loadError) {
     return <div className="map-error">Error loading map. Check your API key.</div>;
@@ -136,9 +130,10 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
     return <div className="map-loading">Loading map...</div>;
   }
 
+  // When selecting location (click-to-place), don't show circle until pin is placed
   const circleCenter = (circleCenterOverride && circleCenterOverride.lat != null && circleCenterOverride.lng != null)
     ? { lat: Number(circleCenterOverride.lat), lng: Number(circleCenterOverride.lng) }
-    : !useMyLocation && manualSearchCenter && manualSearchCenter.lat != null && manualSearchCenter.lng != null
+    : !useMyLocation && !isSelectingLocation && manualSearchCenter && manualSearchCenter.lat != null && manualSearchCenter.lng != null
       ? { lat: Number(manualSearchCenter.lat), lng: Number(manualSearchCenter.lng) }
       : userLocation && userLocation.lat != null && userLocation.lng != null
         ? { lat: Number(userLocation.lat), lng: Number(userLocation.lng) }
@@ -153,18 +148,22 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
   }
   const initialCenterWhenManual = useMyLocation ? undefined : (initialManualCenterRef.current || defaultCenter);
 
+  const showPlacedPin = !useMyLocation && !isSelectingLocation && manualSearchCenter && manualSearchCenter.lat != null && manualSearchCenter.lng != null;
+
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div
+      style={{ position: 'relative', width: '100%', height: '100%' }}
+    >
       <GoogleMap
-        mapContainerStyle={mapContainerStyle}
-        center={useMyLocation ? mapCenter : undefined}
+        mapContainerStyle={getMapContainerStyle(isSelectingLocation)}
+        center={useMyLocation && events.length === 0 ? mapCenter : undefined}
         defaultCenter={initialCenterWhenManual}
         defaultZoom={10}
-        zoom={useMyLocation ? 10 : undefined}
+        zoom={useMyLocation && events.length === 0 ? 10 : undefined}
         onLoad={onLoad}
         options={{ mapTypeControl: true, fullscreenControl: true, zoomControl: true }}
       >
-        {circleCenter && searchRadiusMiles != null && Number(searchRadiusMiles) > 0 && (
+        {!isSelectingLocation && circleCenter && searchRadiusMiles != null && Number(searchRadiusMiles) > 0 && (
           <Circle
             center={circleCenter}
             radius={Number(searchRadiusMiles) * MILES_TO_METERS}
@@ -191,6 +190,20 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
             }}
           />
         )}
+        {showPlacedPin && (
+          <Marker
+            position={{ lat: Number(manualSearchCenter.lat), lng: Number(manualSearchCenter.lng) }}
+            title="Search center"
+            icon={{
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 10,
+              fillColor: '#4285F4',
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 2,
+            }}
+          />
+        )}
       {Array.from(locationGroups.entries()).map(([key, groupEvents]) => {
         const first = groupEvents[0];
         const lat = Number(first.latitude);
@@ -206,8 +219,8 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
             title={first.name}
           >
             {isSelected && (
-              <InfoWindow position={pos} onCloseClick={() => onMarkerClick(null)}>
-                <div className="map-info-window" style={{ maxWidth: 320, maxHeight: 400, overflow: 'auto' }}>
+              <InfoWindow position={pos} onCloseClick={() => onMarkerClick(null)} options={{ disableAutoPan: true }}>
+                <div className="map-info-window" style={{ width: 240, maxWidth: 240, minWidth: 240 }}>
                   {groupEvents.length > 1 ? (
                     <div>
                       <p className="m-0 mb-2 text-sm font-semibold text-gray-700">{groupEvents.length} events at this location</p>
@@ -227,24 +240,6 @@ function MapView({ userLocation, events = [], selectedMarkerKey, onMarkerClick, 
         );
       })}
     </GoogleMap>
-    {!useMyLocation && (
-      <div
-        style={{
-          position: 'absolute',
-          left: '50%',
-          top: '50%',
-          transform: 'translate(-50%, -50%) rotate(-45deg)',
-          pointerEvents: 'none',
-          width: 28,
-          height: 28,
-          borderRadius: '50% 50% 50% 0',
-          background: '#4285F4',
-          border: '3px solid white',
-          boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
-        }}
-        aria-hidden
-      />
-    )}
     </div>
   );
 }
