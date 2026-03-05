@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import BookmarkStar from "./bookmarkStar";
 import EventCard from "../EventCard";
 import MapView from "../MapView";
+import ProgressBar from "./progressBar";
 
 /** Straight-line distance in miles (haversine) between two lat/lng points. */
 function distanceMiles(lat1, lon1, lat2, lon2) {
@@ -21,6 +22,7 @@ export default function ResultsPanel({
   events,
   loading,
   error,
+  progress = 0,
   user,
   showPreciseLocationSplitView,
   lastSearchArgs,
@@ -155,9 +157,7 @@ export default function ResultsPanel({
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-purple-600 text-lg">
-          <p>Loading events...</p>
-        </div>
+        <ProgressBar progress={progress} label="Aggregating events from all sources..." />
       ) : events.length === 0 && !error ? (
         <div className="text-center py-12 text-gray-600">
           <p>Enter a location and click "Search" to find events in your area.</p>
