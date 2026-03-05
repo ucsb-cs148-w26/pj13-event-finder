@@ -283,12 +283,14 @@ function App() {
     >
       {/* ONE header */}
       <header className="bg-white/95 backdrop-blur-sm shadow-md py-8 px-4 text-center relative">
-        {/* Top-left Upload button */}
-        <div className="absolute top-4 left-4 flex items-center">
-          <button type="button" className="sign-in-btn" onClick={() => setUploadModalOpen(true)}>
-            Upload
-          </button>
-        </div>
+        {/* Top-left Upload button (only when signed in) */}
+        {user && (
+          <div className="absolute top-4 left-4 flex items-center">
+            <button type="button" className="sign-in-btn" onClick={() => setUploadModalOpen(true)}>
+              Upload
+            </button>
+          </div>
+        )}
 
         {/* Top-right auth area */}
         <div className="absolute top-4 right-4 flex items-center gap-3">
