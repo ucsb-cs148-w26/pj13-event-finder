@@ -62,6 +62,8 @@ function App() {
   const [useMyLocationInPreview, setUseMyLocationInPreview] = useState(true);
   const [manualSearchCenter, setManualSearchCenter] = useState(null); // { lat, lng } when "select location" is used and user has placed pin
   const [isSelectingLocationOnMap, setIsSelectingLocationOnMap] = useState(false); // true when waiting for user to click on map to place pin
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [uploadInputText, setUploadInputText] = useState("");
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -281,6 +283,15 @@ function App() {
     >
       {/* ONE header */}
       <header className="bg-white/95 backdrop-blur-sm shadow-md py-8 px-4 text-center relative">
+        {/* Top-left Upload button (only when signed in) */}
+        {user && (
+          <div className="absolute top-4 left-4 flex items-center">
+            <button type="button" className="sign-in-btn" onClick={() => setUploadModalOpen(true)}>
+              Upload URL
+            </button>
+          </div>
+        )}
+
         {/* Top-right auth area */}
         <div className="absolute top-4 right-4 flex items-center gap-3">
           {user ? (
@@ -322,6 +333,56 @@ function App() {
         </h1>
         <p className="mt-2 mb-0 text-gray-600 text-lg">Find events in your area</p>
       </header>
+
+      {/* Upload modal */}
+      {uploadModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setUploadModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="upload-modal-title"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="upload-modal-title" className="text-lg font-semibold text-gray-800 mt-0 mb-4">
+              Upload URL
+            </h2>
+            <input
+              type="text"
+              value={uploadInputText}
+              onChange={(e) => setUploadInputText(e.target.value)}
+              placeholder="Enter text..."
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 mb-4"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="sign-in-btn"
+                onClick={() => {
+                  setUploadModalOpen(false);
+                  setUploadInputText("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sign-in-btn"
+                onClick={() => {
+                  setUploadModalOpen(false);
+                  setUploadInputText("");
+                }}
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className={`flex-1 w-full mx-auto px-4 py-8 flex flex-col gap-6 ${showPreciseLocationSplitView ? "max-w-[100%]" : "max-w-7xl"}`}>
         <Routes>
