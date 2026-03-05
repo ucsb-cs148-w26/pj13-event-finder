@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from api.llm_router import route_and_fetch_events
 from api import ticketmaster, allevents
 from api.open_scraper import find_event_site_url, scrape_events_from_url
+from api.eventbrite_scraper import scrape_eventbrite
 
 load_dotenv()
 
@@ -121,6 +122,9 @@ def get_events(
         radius=radius,
     )
     ae_data = {"events": []}
+    eb_data = {"events": []}
+    os_data = {"events": []}
+
     if location:
         ae_data = allevents.fetch_events(
             location=location,
@@ -131,10 +135,37 @@ def get_events(
             min_price=min_price,
             max_price=max_price,
         )
+        eb_data = scrape_eventbrite(
+            location=location,
+            start_date=start_date,
+            end_date=end_date,
+            event_type=event_type,
+            category=category,
+            min_price=min_price,
+            max_price=max_price,
+        )
+        site_info = find_event_site_url(location)
+        site_url = site_info.get("url") if "error" not in site_info else None
+        if site_url:
+            os_data = scrape_events_from_url(
+                site_url,
+                location,
+                start_date=start_date,
+                end_date=end_date,
+                event_type=event_type,
+                category=category,
+                min_price=min_price,
+                max_price=max_price,
+            )
+            if "error" in os_data or "_scrape_failure_reason" in os_data:
+                os_data = {"events": []}
+                print("Open scraper failed for URL:", site_url, "Reason:", os_data.get("error") or os_data.get("_scrape_failure_reason"))
     combined_events = []
     seen_event_keys = set()
     tm_count = 0
     ae_count = 0
+    eb_count = 0
+    os_count = 0
 
     def get_event_key(name, date_str):
         name_norm = str(name).lower().strip()
@@ -155,13 +186,31 @@ def get_events(
             combined_events.append(event)
             seen_event_keys.add(key)
             ae_count += 1
-    
+
+    for event in eb_data.get("events", []):
+        key = get_event_key(event.get("name"), event.get("date"))
+        if key not in seen_event_keys:
+            combined_events.append(event)
+            seen_event_keys.add(key)
+            eb_count += 1
+
+    for event in os_data.get("events", []):
+        key = get_event_key(event.get("name"), event.get("date"))
+        if key not in seen_event_keys:
+            combined_events.append(event)
+            seen_event_keys.add(key)
+            os_count += 1
+
     print("TM events:", tm_count)
     print("AE events:", ae_count)
+    print("EB events:", eb_count)
+    print("OS events:", os_count)
 
     return {
         "ticketmaster_status": "error" if "error" in tm_data else "ok",
         "allevents_status": "error" if "error" in ae_data else "ok",
+        "eventbrite_status": "error" if "error" in eb_data else "ok",
+        "openscraper_status": "error" if "error" in os_data else "ok",
         "events": combined_events,
         "total": len(combined_events)
     }
@@ -184,24 +233,54 @@ def find(prompt: str):
 @app.get("/api/scrape-events")
 def scrape_events(location: str):
     """
-    Finds the official event site URL for a given location, then scrapes 
+    Finds the official event site URL for a given location, then scrapes
     that URL and uses the LLM to extract structured event data.
+    Returns an empty event list if the site cannot be accessed.
     Usage: /api/scrape-events?location=santa barbara
     """
     site_info = find_event_site_url(location)
-    
+
     if "error" in site_info:
-        return site_info
-        
+        return {"events": [], "total": 0, "error": site_info["error"]}
+
     url = site_info.get("url")
     if not url:
-        return {"error": f"Could not find an official event site URL for '{location}'."}
+        return {"events": [], "total": 0, "error": f"Could not find an event site URL for '{location}'."}
 
-    # 2. Scrape the URL we just found
     scrape_result = scrape_events_from_url(url, location)
-    
-    # Attach the found URL to the final output for reference
-    if "error" not in scrape_result:
-        scrape_result["source_url"] = url
-        
+
+    if "error" in scrape_result or "_scrape_failure_reason" in scrape_result:
+        return {
+            "events": [],
+            "total": 0,
+            "error": scrape_result.get("error", "Site could not be accessed."),
+            "attempted_url": url,
+        }
+
+    scrape_result["source_url"] = url
     return scrape_result
+
+
+@app.get("/api/eventbrite-scrape")
+def eventbrite_scrape(
+    location: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    event_type: Optional[str] = None,
+    category: Optional[str] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+):
+    """
+    Scrapes Eventbrite for events in a given location.
+    Usage: /api/eventbrite-scrape?location=santa barbara&start_date=2026-03-01&end_date=2026-04-01
+    """
+    return scrape_eventbrite(
+        location,
+        start_date=start_date,
+        end_date=end_date,
+        event_type=event_type,
+        category=category,
+        min_price=min_price,
+        max_price=max_price,
+    )
