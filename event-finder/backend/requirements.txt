@@ -6,3 +6,4 @@ httpx
 openai
 beautifulsoup4
 python-dateutil
+cloudscraper
