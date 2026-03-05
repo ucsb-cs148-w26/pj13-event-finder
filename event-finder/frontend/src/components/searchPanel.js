@@ -6,7 +6,7 @@ import { US_STATES, CITIES_BY_STATE, POPULAR_CITIES } from "../utils/locationDat
  * SearchPanel owns ONLY search UI state.
  * When the user submits, it calls onSearch({ ...searchArgs }) and lets App do the fetch.
  */
-export default function SearchPanel({ onSearch, loading, onLocationPreviewChange }) {
+export default function SearchPanel({ onSearch, loading, onLocationPreviewChange, isSelectingLocationOnMap, hasSelectedLocation, onReselectLocation, fullWidthInLayout = false }) {
   const [stateQuery, setStateQuery] = useState("");
   const [selectedState, setSelectedState] = useState("");
   const [showStateTypeahead, setShowStateTypeahead] = useState(false);
@@ -115,16 +115,24 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
   }, [usePreciseLocation]);
 
   // Notify parent: show=true when in location mode with coords; show=false when not (pass coords so App keeps map mounted and reuses it)
+  // When switching to "Select Location", send startSelectingLocation so map enters click-to-place mode (only when no pin placed yet)
   useEffect(() => {
     if (!onLocationPreviewChange) return;
     if (usePreciseLocation && preciseLat != null && preciseLon != null) {
-      onLocationPreviewChange({ show: true, lat: preciseLat, lng: preciseLon, radiusMiles: preciseRadius, useMyLocation });
+      onLocationPreviewChange({
+        show: true,
+        lat: preciseLat,
+        lng: preciseLon,
+        radiusMiles: preciseRadius,
+        useMyLocation,
+        startSelectingLocation: !useMyLocation && !hasSelectedLocation,
+      });
     } else if (preciseLat != null && preciseLon != null) {
       onLocationPreviewChange({ show: false, lat: preciseLat, lng: preciseLon, radiusMiles: preciseRadius, useMyLocation });
     } else {
       onLocationPreviewChange(null);
     }
-  }, [usePreciseLocation, preciseLat, preciseLon, preciseRadius, useMyLocation, onLocationPreviewChange]);
+  }, [usePreciseLocation, preciseLat, preciseLon, preciseRadius, useMyLocation, hasSelectedLocation, onLocationPreviewChange]);
 
   // Minimum datetime for date inputs (today, now) - prevents selecting past dates, converted to local time
   const pad2 = (n) => String(n).padStart(2, "0");
@@ -140,6 +148,17 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
       startDate: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`,
       endDate: `${in24h.getFullYear()}-${pad(in24h.getMonth() + 1)}-${pad(in24h.getDate())}T${pad(in24h.getHours())}:${pad(in24h.getMinutes())}`,
     };
+  };
+
+  const add24HoursToDateTime = (dateTimeStr) => {
+    if (!dateTimeStr?.trim()) return null;
+    const s = dateTimeStr.trim();
+    const hasTime = s.includes("T");
+    const date = new Date(hasTime ? s : s + "T00:00");
+    if (isNaN(date.getTime())) return null;
+    const next = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}T${pad(next.getHours())}:${pad(next.getMinutes())}`;
   };
 
   const buildSearchArgs = () => ({
@@ -171,20 +190,32 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
       args = { ...args, startDate: defaults.startDate, endDate: defaults.endDate };
       setStartDate(defaults.startDate);
       setEndDate(defaults.endDate);
+    } else if (start && !end) {
+      const endFilled = add24HoursToDateTime(start);
+      if (endFilled) {
+        args = { ...args, endDate: endFilled };
+        setEndDate(endFilled);
+      }
+    } else if (!start && end) {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      const startFilled = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      args = { ...args, startDate: startFilled };
+      setStartDate(startFilled);
     }
     onSearch(args);
   };
 
   return (
     <form
-      className={`w-full ${usePreciseLocation ? "max-w-[50%] mr-auto" : "max-w-7xl mx-auto"}`}
+      className={`w-full ${fullWidthInLayout ? "max-w-none" : usePreciseLocation ? "max-w-[50%] mr-auto" : "max-w-7xl mx-auto"}`}
       onSubmit={onSubmit}
     >
       {/* Glassmorphic Search Card */}
       <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
-        {/* Top row: switch on the far left in its own area */}
+        {/* Top row: Search By and (when Location) location source on same row */}
         <div className="flex flex-col gap-1.5 mb-4 pb-3 border-b border-gray-200/60">
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-row flex-wrap items-end gap-4 w-fit">
             <div>
               <span className="text-sm font-semibold text-gray-700">Search By</span>
               <div className="flex rounded-lg border border-gray-300 bg-gray-100/80 p-0.5 shrink-0 w-fit mt-1">
@@ -213,15 +244,35 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
               </div>
             </div>
             {usePreciseLocation && (
-              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={useMyLocation}
-                  onChange={(e) => setUseMyLocation(e.target.checked)}
-                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                />
-                <span className="font-medium">Use my location</span>
-              </label>
+              <div>
+                <span className="text-sm font-semibold text-gray-700">Location</span>
+                <div className="flex rounded-lg border border-gray-300 bg-gray-100/80 p-0.5 shrink-0 w-fit mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setUseMyLocation(true)}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      useMyLocation ? "bg-white text-purple-700 shadow-sm" : "text-gray-600 hover:text-gray-800"
+                    }`}
+                  >
+                    My Location
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (hasSelectedLocation) {
+                        onReselectLocation?.();
+                      } else {
+                        setUseMyLocation(false);
+                      }
+                    }}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      !useMyLocation ? "bg-white text-purple-700 shadow-sm" : "text-gray-600 hover:text-gray-800"
+                    }`}
+                  >
+                    {hasSelectedLocation ? "Reselect" : "Select Location"}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
