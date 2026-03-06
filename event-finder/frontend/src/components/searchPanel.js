@@ -465,21 +465,33 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
         )}
         {/* Additional Options */}
         <div className="mt-4 flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            {usePreciseLocation && (
-              <span className="text-sm text-gray-600">
-                {preciseLocationLoading && "Getting location…"}
-                {!preciseLocationLoading && preciseLocationError && (
-                  <span className="text-red-600"> {preciseLocationError}</span>
-                )}
-              </span>
-            )}
+          {/* Status line (optional) */}
+          {usePreciseLocation && (
+            <span className="text-sm text-gray-600">
+              {preciseLocationLoading && "Getting location…"}
+              {!preciseLocationLoading && preciseLocationError && (
+                <span className="text-red-600"> {preciseLocationError}</span>
+              )}
+            </span>
+          )}
+
+          <div className="flex items-center justify-between gap-3">
+            {/* Bottom-left: Show/Hide Filters */}
             <button
               type="button"
               onClick={() => setShowFilters(!showFilters)}
-              className="ml-auto px-4 py-2 text-sm font-medium text-gray-700 bg-transparent hover:bg-white/60 border border-gray-300 rounded-lg transition-all"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-transparent hover:bg-white/60 border border-gray-300 rounded-lg transition-all"
             >
               {showFilters ? "Hide" : "Show"} Filters
+            </button>
+
+            {/* Bottom-right: Submit */}
+            <button
+              type="submit"
+              className="search-button panel-btn"
+              disabled={loading}
+            >
+              {loading ? "Searching..." : "Search Events"}
             </button>
           </div>
         </div>
@@ -633,10 +645,6 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
           </div>
         </div>
       )}
-
-      <button type="submit" className="search-button" disabled={loading}>
-        {loading ? "Searching..." : "Search Events"}
-      </button>
     </form>
   );
 }
