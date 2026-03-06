@@ -212,7 +212,7 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
       onSubmit={onSubmit}
     >
       {/* Glassmorphic Search Card */}
-      <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
+      <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl flex flex-col p-6 min-h-[500px]">
         {/* Top row: Search By and (when Location) location source on same row */}
         <div className="flex flex-col gap-1.5 mb-4 pb-3 border-b border-gray-200/60">
           <div className="flex flex-row flex-wrap items-end gap-4 w-fit">
@@ -464,7 +464,7 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
           </div>
         )}
         {/* Additional Options */}
-        <div className="mt-4 flex flex-col gap-3">
+        <div className="mt-auto flex flex-col gap-3">
           {/* Status line (optional) */}
           {usePreciseLocation && (
             <span className="text-sm text-gray-600">
