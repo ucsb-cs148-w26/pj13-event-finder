@@ -498,7 +498,7 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
       </div>
 
       {showFilters && (
-        <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
+        <div className="mt-4 bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-3">
