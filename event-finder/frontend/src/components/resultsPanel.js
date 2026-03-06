@@ -29,6 +29,7 @@ export default function ResultsPanel({
   onBackToSearch,
   selectedMarkerKey,
   onMarkerClick,
+  onEventClick, // new callback when user clicks an event
   listOnly = false,
 }) {
   const [keywordFilter, setKeywordFilter] = useState("");
@@ -111,6 +112,7 @@ export default function ResultsPanel({
                 event={event}
                 user={user}
                 distanceFromCenterMiles={distMi != null ? Math.round(distMi * 10) / 10 : undefined}
+                onClick={() => onEventClick && onEventClick(event)}
               />
             );
           })}
@@ -192,58 +194,17 @@ export default function ResultsPanel({
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {paginatedEvents.map((event) => (
-                  <div
-                    key={event.id}
-                    className="bg-gray-50 rounded-lg border-2 border-gray-200 transition-all overflow-hidden flex flex-col hover:border-purple-500 hover:shadow-lg hover:-translate-y-1"
-                  >
-                    <div className="relative">
-                        {event.image && (
-                        <img
-                            src={event.image}
-                            alt={event.name}
-                            className="w-full h-48 object-cover bg-gray-200"
-                        />
-                        )}
-
-                        {/* Star in the top-right */}
-                        <BookmarkStar user={user} event={event} className="absolute top-3 right-3" />
-                    </div>
-                    <div className="p-6 flex flex-col flex-1">
-                      <h3 className="m-0 mb-3 text-gray-800 text-xl font-bold">
-                        {event.name}
-                      </h3>
-                      {event.venue && (
-                        <p className="m-2 text-gray-600 text-sm">🏢 {event.venue}</p>
-                      )}
-                      {event.location && (
-                        <p className="m-2 text-gray-600 text-sm">📍 {event.location}</p>
-                      )}
-                      <p className="m-2 text-gray-600 text-sm">
-                        📅 {event.date}
-                        {event.time && ` at ${event.time}`}
-                      </p>
-                      {event.priceRange && event.priceRange.min !== undefined && (
-                        <p className="m-2 text-gray-600 text-sm">
-                          💵 {event.priceRange.currency || "USD"} ${event.priceRange.min}
-                          {event.priceRange.max &&
-                            event.priceRange.max !== event.priceRange.min &&
-                            ` - $${event.priceRange.max}`}
-                        </p>
-                      )}
-                      {event.url && (
-                        <a
-                          href={event.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-block mt-auto pt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline"
-                        >
-                          View on {event.source} →
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                {paginatedEvents.map((event) => {
+                  // distance not calculated in standard view
+                  return (
+                    <EventCard
+                      key={event.id}
+                      event={event}
+                      user={user}
+                      onClick={() => onEventClick && onEventClick(event)}
+                    />
+                  );
+                })}
               </div>
 
               {/* Pagination controls */}

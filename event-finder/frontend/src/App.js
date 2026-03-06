@@ -65,6 +65,11 @@ function App() {
   const [isSelectingLocationOnMap, setIsSelectingLocationOnMap] = useState(false); // true when waiting for user to click on map to place pin
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [uploadInputText, setUploadInputText] = useState("");
+  // event detail modal state
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailEvent, setDetailEvent] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -304,6 +309,32 @@ function App() {
     setSelectedMarkerKey(null);
   };
 
+  // called when user clicks an event card
+  const handleEventClick = async (event) => {
+    setDetailEvent(event);
+    setDetailError("");
+    setDetailLoading(true);
+    setDetailModalOpen(true);
+
+    // if ticketmaster, fetch extra details
+    if (event.source === "Ticketmaster" && event.id) {
+      try {
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+        const res = await fetch(`${backendUrl}/api/ticketmaster-event?id=${encodeURIComponent(event.id)}`);
+        const data = await res.json();
+        if (data.error) {
+          setDetailError(data.error);
+        } else {
+          setDetailEvent((prev) => ({ ...prev, details: data.details || data }));
+        }
+      } catch (err) {
+        setDetailError(err.message || String(err));
+      }
+    }
+
+    setDetailLoading(false);
+  };
+
   return (
     <div
       className="min-h-screen flex flex-col app-bg"
@@ -412,6 +443,60 @@ function App() {
         </div>
       )}
 
+      {/* Event detail modal */}
+      {detailModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setDetailModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="event-detail-title"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg mx-4 overflow-y-auto max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="event-detail-title" className="text-lg font-semibold text-gray-800 mt-0 mb-4">
+              {detailEvent?.name || "Event details"}
+            </h2>
+            {detailLoading ? (
+              <p>Loading...</p>
+            ) : detailError ? (
+              <p className="text-red-600">{detailError}</p>
+            ) : (
+              <>
+                {(detailEvent?.details?.description || detailEvent?.description) && (
+                  <p className="mb-4 text-gray-700">
+                    {detailEvent.details?.description || detailEvent.description}
+                  </p>
+                )}
+                <p className="text-gray-600 mb-2">
+                  📅 {detailEvent?.date || detailEvent?.details?.date}{detailEvent?.time || detailEvent?.details?.time ? ` at ${detailEvent?.time || detailEvent?.details?.time}` : ""}
+                </p>
+                {detailEvent?.venue && <p className="text-gray-600 mb-2">🏢 {detailEvent.venue}</p>}
+                {detailEvent?.location && <p className="text-gray-600 mb-2">📍 {detailEvent.location}</p>}
+                {detailEvent?.priceRange && detailEvent.priceRange.min !== undefined && (
+                  <p className="text-gray-600 mb-2">
+                    💵 {detailEvent.priceRange.currency || "USD"} ${detailEvent.priceRange.min}
+                    {detailEvent.priceRange.max && detailEvent.priceRange.max !== detailEvent.priceRange.min && ` - $${detailEvent.priceRange.max}`}
+                  </p>
+                )}
+                {detailEvent?.url && (
+                  <a
+                    href={detailEvent.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline"
+                  >
+                    View on {detailEvent.source} →
+                  </a>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <main className={`flex-1 w-full mx-auto px-4 py-8 flex flex-col gap-6 ${showPreciseLocationSplitView ? "max-w-[100%]" : "max-w-7xl"}`}>
         <Routes>
           <Route
@@ -461,6 +546,7 @@ function App() {
                       onBackToSearch={handleBackToSearch}
                       selectedMarkerKey={selectedMarkerKey}
                       onMarkerClick={setSelectedMarkerKey}
+                      onEventClick={handleEventClick}
                       listOnly
                     />
                   )}
@@ -513,6 +599,7 @@ function App() {
                     onBackToSearch={handleBackToSearch}
                     selectedMarkerKey={selectedMarkerKey}
                     onMarkerClick={setSelectedMarkerKey}
+                    onEventClick={handleEventClick}
                   />
                 )}
               </>

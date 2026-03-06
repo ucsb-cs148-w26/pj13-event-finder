@@ -1,9 +1,11 @@
 import React from "react";
 import BookmarkStar from "./components/bookmarkStar";
 
-function EventCard({ event, user, compact, distanceFromCenterMiles }) {
+function EventCard({ event, user, compact, distanceFromCenterMiles, onClick }) {
   return (
     <div
+      onClick={onClick}
+      style={onClick ? { cursor: "pointer" } : undefined}
       className={`bg-gray-50 rounded-lg border-2 border-gray-200 transition-all overflow-hidden flex flex-col hover:border-purple-500 hover:shadow-lg ${
         compact ? "min-w-0 w-full max-w-full" : ""
       } ${compact ? "" : "hover:-translate-y-1"}`}
@@ -66,6 +68,7 @@ function EventCard({ event, user, compact, distanceFromCenterMiles }) {
             href={event.url}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
             className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline"
           >
             View on {event.source} →

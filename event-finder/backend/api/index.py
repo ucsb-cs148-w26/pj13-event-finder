@@ -218,6 +218,10 @@ def get_events(
         "total": len(combined_events)
     }
 
+@app.get("/api/ticketmaster-event")
+def ticketmaster_event_detail(id: str):
+    """Return additional information for a Ticketmaster event by its ID."""
+    return ticketmaster.fetch_event_details(id)
 @app.get("/api/events-stream")
 def get_events_stream(
     location: Optional[str] = None,
