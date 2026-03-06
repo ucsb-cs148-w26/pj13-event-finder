@@ -69,7 +69,7 @@ export default function ProfileBookmarksPage({ user }) {
                 <img src={b.image} alt={b.name} className="w-full h-48 object-cover bg-gray-200" />
               )}
 
-              <div className="p-6">
+              <div className="p-6 flex flex-col flex-1">
                 <h3 className="m-0 mb-3 text-gray-800 text-xl font-bold">{b.name}</h3>
                 {b.venue && <p className="m-2 text-gray-600 text-sm">🏢 {b.venue}</p>}
                 {b.location && <p className="m-2 text-gray-600 text-sm">📍 {b.location}</p>}
@@ -79,7 +79,7 @@ export default function ProfileBookmarksPage({ user }) {
                   </p>
                 )}
 
-                <div className="mt-4 flex items-center justify-between gap-3">
+                <div className="mt-auto pt-4 flex items-center justify-between">
                   {b.url ? (
                     <a
                       href={b.url}
@@ -87,7 +87,7 @@ export default function ProfileBookmarksPage({ user }) {
                       rel="noopener noreferrer"
                       className="text-purple-600 font-semibold hover:underline"
                     >
-                      View →
+                      View event →
                     </a>
                   ) : (
                     <span />
