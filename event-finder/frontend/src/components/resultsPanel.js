@@ -107,6 +107,7 @@ export default function ResultsPanel({
               <EventCard
                 key={event.id}
                 event={event}
+                user={user}
                 distanceFromCenterMiles={distMi != null ? Math.round(distMi * 10) / 10 : undefined}
               />
             );
@@ -208,7 +209,7 @@ export default function ResultsPanel({
                         {/* Star in the top-right */}
                         <BookmarkStar user={user} event={event} className="absolute top-3 right-3" />
                     </div>
-                    <div className="p-6">
+                    <div className="p-6 flex flex-col flex-1">
                       <h3 className="m-0 mb-3 text-gray-800 text-xl font-bold">
                         {event.name}
                       </h3>
@@ -235,9 +236,9 @@ export default function ResultsPanel({
                           href={event.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline"
+                          className="inline-block mt-auto pt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline"
                         >
-                          View on {event.source || "Ticketmaster"} →
+                          View on {event.source} →
                         </a>
                       )}
                     </div>
