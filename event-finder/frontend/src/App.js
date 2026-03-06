@@ -55,6 +55,7 @@ function App() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [progress, setProgress] = useState(0); // 0-100 for progress bar
   const [lastSearchArgs, setLastSearchArgs] = useState(null);
   const [selectedMarkerKey, setSelectedMarkerKey] = useState(null);
   const [locationPreview, setLocationPreview] = useState(null); // { lat, lng, radiusMiles } once we have coords; kept so preview map never unmounts
@@ -146,6 +147,7 @@ function App() {
     setLoading(true);
     setError("");
     setEvents([]);
+    setProgress(0); // Reset progress
     setSelectedMarkerKey(null);
 
     try {
@@ -244,25 +246,51 @@ function App() {
       if (f.priceRange?.max) params.append("max_price", f.priceRange.max);
 
       const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-      const apiUrl = `${backendUrl}/api/events?${params.toString()}`;
+      const apiUrl = `${backendUrl}/api/events-stream?${params.toString()}`;
       console.log("API URL:", apiUrl);
 
-      const response = await fetch(apiUrl);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-      const data = await response.json();
-
-      if (data.error) {
-        setError(data.error);
-      } else {
-        const nextEvents = data.events || [];
-        setEvents(nextEvents);
-        if (nextEvents.length === 0) setError("No events found. Try adjusting your search criteria.");
-      }
+      // Use EventSource for streaming progress updates
+      const eventSource = new EventSource(apiUrl);
+      
+      eventSource.addEventListener("message", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("Received stream data:", data);
+          
+          // Update progress
+          if (data.progress !== undefined) {
+            setProgress(data.progress);
+          }
+          
+          // When complete, set events and close connection
+          if (data.status === "complete") {
+            if (data.error) {
+              setError(data.error);
+              setEvents([]);
+            } else {
+              const nextEvents = data.events || [];
+              setEvents(nextEvents);
+              if (nextEvents.length === 0) {
+                setError("No events found. Try adjusting your search criteria.");
+              }
+            }
+            setLoading(false);
+            eventSource.close();
+          }
+        } catch (parseErr) {
+          console.error("Error parsing stream data:", parseErr);
+        }
+      });
+      
+      eventSource.addEventListener("error", (event) => {
+        console.error("Stream error:", event);
+        setError("Failed to fetch events. Please try again.");
+        setLoading(false);
+        eventSource.close();
+      });
     } catch (err) {
       console.error("Search error:", err);
       setError(`Failed to search events: ${err.message}`);
-    } finally {
       setLoading(false);
     }
   };
@@ -426,6 +454,7 @@ function App() {
                       events={events}
                       loading={loading}
                       error={error}
+                      progress={progress}
                       user={user}
                       showPreciseLocationSplitView={showPreciseLocationSplitView}
                       lastSearchArgs={lastSearchArgs}
@@ -477,6 +506,7 @@ function App() {
                     events={events}
                     loading={loading}
                     error={error}
+                    progress={progress}
                     user={user}
                     showPreciseLocationSplitView={showPreciseLocationSplitView}
                     lastSearchArgs={lastSearchArgs}
