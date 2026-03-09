@@ -164,10 +164,23 @@ def fetch_events(
                     location_obj = venue.get("location", {})
                     event_info["latitude"] = location_obj.get("latitude")
                     event_info["longitude"] = location_obj.get("longitude")
-                    address = venue.get("address", {})
-                    city = venue.get("city", {}).get("name", "")
-                    state = venue.get("state", {}).get("stateCode", "")
-                    event_info["location"] = f"{city}, {state}"
+                    address = venue.get("address", {}) or {}
+                    city = venue.get("city", {}).get("name", "") or (address.get("city") or "")
+                    state = (venue.get("state", {}).get("stateCode", "") or address.get("stateCode", "") or "").strip()
+                    postal = (address.get("postalCode") or "").strip()
+                    line1 = (address.get("line1") or "").strip()
+                    line2 = (address.get("line2") or "").strip()
+                    parts = [p for p in [line1, line2] if p]
+                    city_state = ", ".join(filter(None, [city, state]))
+                    if postal and city_state:
+                        city_state = f"{city_state} {postal}"
+                    elif postal:
+                        city_state = postal
+                    if parts:
+                        full_address = ", ".join(parts) + (f", {city_state}" if city_state else "")
+                    else:
+                        full_address = city_state or "Address not available"
+                    event_info["location"] = full_address
                 
                 if "images" in event and event["images"]:
                     event_info["image"] = event["images"][0].get("url", "")
@@ -217,3 +230,82 @@ def fetch_events(
         return {"error": f"Ticketmaster API Error: {err_msg}", "events": []}
     except Exception as e:
         return {"error": f"An error occurred: {str(e)}", "events": []}
+
+
+def fetch_event_details(event_id: str) -> Dict[str, Any]:
+    """Fetch additional information for a single Ticketmaster event by ID.
+
+    Returns a dictionary with a "details" key containing normalized fields, or
+    an "error" key if something went wrong. This is used by the frontend modal
+    so users can view event data without navigating to Ticketmaster.
+    """
+    if not TICKETMASTER_API_KEY:
+        _key_present_but_empty = "TICKETMASTER_API_KEY" in os.environ and not (os.environ.get("TICKETMASTER_API_KEY") or "").strip()
+        return {
+            "error": "Ticketmaster API key not configured. Add your key in backend/.env as TICKETMASTER_API_KEY=your_key (value was empty)." if _key_present_but_empty else "Ticketmaster API key not configured",
+        }
+
+    try:
+        response = requests.get(f"{TICKETMASTER_BASE_URL}/events/{event_id}.json", params={"apikey": TICKETMASTER_API_KEY})
+        response.raise_for_status()
+        data = response.json()
+
+        # Build a minimal normalized details object similar to fetch_events
+        details = {
+            "id": data.get("id", ""),
+            "name": data.get("name", ""),
+            "url": data.get("url", ""),
+            "description": data.get("info") or data.get("pleaseNote") or data.get("description") or "",
+            "date": data.get("dates", {}).get("start", {}).get("localDate", ""),
+            "time": data.get("dates", {}).get("start", {}).get("localTime", ""),
+            "status": data.get("dates", {}).get("status", {}).get("code", ""),
+            "venue": "",
+            "location": "",
+            "image": "",
+            "priceRange": {},
+        }
+        if "_embedded" in data and "venues" in data["_embedded"]:
+            venue = data["_embedded"]["venues"][0]
+            details["venue"] = venue.get("name", "")
+            address = venue.get("address", {}) or {}
+            city = venue.get("city", {}).get("name", "") or (address.get("city") or "")
+            state = (venue.get("state", {}).get("stateCode", "") or address.get("stateCode", "") or "").strip()
+            postal = (address.get("postalCode") or "").strip()
+            line1 = (address.get("line1") or "").strip()
+            line2 = (address.get("line2") or "").strip()
+            parts = [p for p in [line1, line2] if p]
+            city_state = ", ".join(filter(None, [city, state]))
+            if postal and city_state:
+                city_state = f"{city_state} {postal}"
+            elif postal:
+                city_state = postal
+            if parts:
+                full_address = ", ".join(parts) + (f", {city_state}" if city_state else "")
+            else:
+                full_address = city_state or "Address not available"
+            details["location"] = full_address
+
+        if "images" in data and data["images"]:
+            details["image"] = data["images"][0].get("url", "")
+
+        if "priceRanges" in data and data["priceRanges"]:
+            p = data["priceRanges"][0]
+            details["priceRange"] = {
+                "min": p.get("min"),
+                "max": p.get("max"),
+                "currency": p.get("currency"),
+            }
+
+        return {"details": details}
+    except requests.exceptions.RequestException as e:
+        err_msg = str(e)
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_json = e.response.json()
+                if "errors" in error_json:
+                    err_msg = f"{error_json['errors'][0].get('detail', 'Unknown error')}"
+            except:
+                pass
+        return {"error": f"Ticketmaster API Error: {err_msg}"}
+    except Exception as e:
+        return {"error": f"An error occurred: {str(e)}"}

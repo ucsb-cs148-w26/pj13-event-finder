@@ -55,6 +55,7 @@ function App() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [progress, setProgress] = useState(0); // 0-100 for progress bar
   const [lastSearchArgs, setLastSearchArgs] = useState(null);
   const [selectedMarkerKey, setSelectedMarkerKey] = useState(null);
   const [locationPreview, setLocationPreview] = useState(null); // { lat, lng, radiusMiles } once we have coords; kept so preview map never unmounts
@@ -64,6 +65,11 @@ function App() {
   const [isSelectingLocationOnMap, setIsSelectingLocationOnMap] = useState(false); // true when waiting for user to click on map to place pin
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [uploadInputText, setUploadInputText] = useState("");
+  // event detail modal state
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailEvent, setDetailEvent] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -146,6 +152,7 @@ function App() {
     setLoading(true);
     setError("");
     setEvents([]);
+    setProgress(0); // Reset progress
     setSelectedMarkerKey(null);
 
     try {
@@ -244,25 +251,51 @@ function App() {
       if (f.priceRange?.max) params.append("max_price", f.priceRange.max);
 
       const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-      const apiUrl = `${backendUrl}/api/events?${params.toString()}`;
+      const apiUrl = `${backendUrl}/api/events-stream?${params.toString()}`;
       console.log("API URL:", apiUrl);
 
-      const response = await fetch(apiUrl);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-      const data = await response.json();
-
-      if (data.error) {
-        setError(data.error);
-      } else {
-        const nextEvents = data.events || [];
-        setEvents(nextEvents);
-        if (nextEvents.length === 0) setError("No events found. Try adjusting your search criteria.");
-      }
+      // Use EventSource for streaming progress updates
+      const eventSource = new EventSource(apiUrl);
+      
+      eventSource.addEventListener("message", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("Received stream data:", data);
+          
+          // Update progress
+          if (data.progress !== undefined) {
+            setProgress(data.progress);
+          }
+          
+          // When complete, set events and close connection
+          if (data.status === "complete") {
+            if (data.error) {
+              setError(data.error);
+              setEvents([]);
+            } else {
+              const nextEvents = data.events || [];
+              setEvents(nextEvents);
+              if (nextEvents.length === 0) {
+                setError("No events found. Try adjusting your search criteria.");
+              }
+            }
+            setLoading(false);
+            eventSource.close();
+          }
+        } catch (parseErr) {
+          console.error("Error parsing stream data:", parseErr);
+        }
+      });
+      
+      eventSource.addEventListener("error", (event) => {
+        console.error("Stream error:", event);
+        setError("Failed to fetch events. Please try again.");
+        setLoading(false);
+        eventSource.close();
+      });
     } catch (err) {
       console.error("Search error:", err);
       setError(`Failed to search events: ${err.message}`);
-    } finally {
       setLoading(false);
     }
   };
@@ -274,6 +307,32 @@ function App() {
     setEvents([]);
     setError("");
     setSelectedMarkerKey(null);
+  };
+
+  // called when user clicks an event card
+  const handleEventClick = async (event) => {
+    setDetailEvent(event);
+    setDetailError("");
+    setDetailLoading(true);
+    setDetailModalOpen(true);
+
+    // if ticketmaster, fetch extra details
+    if (event.source === "Ticketmaster" && event.id) {
+      try {
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+        const res = await fetch(`${backendUrl}/api/ticketmaster-event?id=${encodeURIComponent(event.id)}`);
+        const data = await res.json();
+        if (data.error) {
+          setDetailError(data.error);
+        } else {
+          setDetailEvent((prev) => ({ ...prev, details: data.details || data }));
+        }
+      } catch (err) {
+        setDetailError(err.message || String(err));
+      }
+    }
+
+    setDetailLoading(false);
   };
 
   return (
@@ -384,6 +443,60 @@ function App() {
         </div>
       )}
 
+      {/* Event detail modal */}
+      {detailModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setDetailModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="event-detail-title"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg mx-4 overflow-y-auto max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="event-detail-title" className="text-lg font-semibold text-gray-800 mt-0 mb-4">
+              {detailEvent?.name || "Event details"}
+            </h2>
+            {detailLoading ? (
+              <p>Loading...</p>
+            ) : detailError ? (
+              <p className="text-red-600">{detailError}</p>
+            ) : (
+              <>
+                {(detailEvent?.details?.description || detailEvent?.description) && (
+                  <p className="mb-4 text-gray-700">
+                    {detailEvent.details?.description || detailEvent.description}
+                  </p>
+                )}
+                <p className="text-gray-600 mb-2">
+                  📅 {detailEvent?.date || detailEvent?.details?.date}{detailEvent?.time || detailEvent?.details?.time ? ` at ${detailEvent?.time || detailEvent?.details?.time}` : ""}
+                </p>
+                {detailEvent?.venue && <p className="text-gray-600 mb-2">🏢 {detailEvent.venue}</p>}
+                {detailEvent?.location && <p className="text-gray-600 mb-2">📍 {detailEvent.location}</p>}
+                {detailEvent?.priceRange && detailEvent.priceRange.min !== undefined && (
+                  <p className="text-gray-600 mb-2">
+                    💵 {detailEvent.priceRange.currency || "USD"} ${detailEvent.priceRange.min}
+                    {detailEvent.priceRange.max && detailEvent.priceRange.max !== detailEvent.priceRange.min && ` - $${detailEvent.priceRange.max}`}
+                  </p>
+                )}
+                {detailEvent?.url && (
+                  <a
+                    href={detailEvent.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline"
+                  >
+                    View on {detailEvent.source} →
+                  </a>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <main className={`flex-1 w-full mx-auto px-4 py-8 flex flex-col gap-6 ${showPreciseLocationSplitView ? "max-w-[100%]" : "max-w-7xl"}`}>
         <Routes>
           <Route
@@ -426,12 +539,14 @@ function App() {
                       events={events}
                       loading={loading}
                       error={error}
+                      progress={progress}
                       user={user}
                       showPreciseLocationSplitView={showPreciseLocationSplitView}
                       lastSearchArgs={lastSearchArgs}
                       onBackToSearch={handleBackToSearch}
                       selectedMarkerKey={selectedMarkerKey}
                       onMarkerClick={setSelectedMarkerKey}
+                      onEventClick={handleEventClick}
                       listOnly
                     />
                   )}
@@ -477,12 +592,14 @@ function App() {
                     events={events}
                     loading={loading}
                     error={error}
+                    progress={progress}
                     user={user}
                     showPreciseLocationSplitView={showPreciseLocationSplitView}
                     lastSearchArgs={lastSearchArgs}
                     onBackToSearch={handleBackToSearch}
                     selectedMarkerKey={selectedMarkerKey}
                     onMarkerClick={setSelectedMarkerKey}
+                    onEventClick={handleEventClick}
                   />
                 )}
               </>

@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from typing import Optional
 from dotenv import load_dotenv
 from api.llm_router import route_and_fetch_events
@@ -7,6 +8,8 @@ from api import ticketmaster, allevents
 from api.open_scraper import find_event_site_url, scrape_events_from_url
 from api.eventbrite_scraper import scrape_eventbrite
 from firebase_database.cache import check_cache, store_cache, apply_local_filters
+import json
+import threading
 
 load_dotenv()
 
@@ -257,6 +260,214 @@ def get_events(
         "events": combined_events,
         "total": len(combined_events),
     }
+
+@app.get("/api/ticketmaster-event")
+def ticketmaster_event_detail(id: str):
+    """Return additional information for a Ticketmaster event by its ID."""
+    return ticketmaster.fetch_event_details(id)
+@app.get("/api/events-stream")
+def get_events_stream(
+    location: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    radius: Optional[int] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    event_type: Optional[str] = None,
+    category: Optional[str] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None
+):
+    """
+    Stream events with progress updates. Fetches from multiple sources in parallel
+    and sends progress updates via Server-Sent Events.
+    """
+    
+    def event_generator():
+        # Determine total sources
+        using_location = bool(location and not (lat is not None and lon is not None))
+        total_sources = 4 if using_location else 1  # TM, AE, EB, OS for location; just TM for lat/lon
+        
+        # Storage for results from each source
+        results = {
+            "ticketmaster": None,
+            "allevents": None,
+            "eventbrite": None,
+            "openscraper": None,
+        }
+        results_lock = threading.Lock()
+        
+        def fetch_ticketmaster():
+            try:
+                data = ticketmaster.fetch_events(
+                    location=location or "",
+                    start_date=start_date,
+                    end_date=end_date,
+                    event_type=event_type,
+                    category=category,
+                    min_price=min_price,
+                    max_price=max_price,
+                    lat=lat,
+                    lon=lon,
+                    radius=radius,
+                )
+                with results_lock:
+                    results["ticketmaster"] = data
+            except Exception as e:
+                print(f"Error fetching Ticketmaster: {e}")
+                with results_lock:
+                    results["ticketmaster"] = {"events": [], "error": str(e)}
+        
+        def fetch_allevents():
+            try:
+                data = allevents.fetch_events(
+                    location=location,
+                    start_date=start_date,
+                    end_date=end_date,
+                    event_type=event_type,
+                    category=category,
+                    min_price=min_price,
+                    max_price=max_price,
+                )
+                with results_lock:
+                    results["allevents"] = data
+            except Exception as e:
+                print(f"Error fetching AllEvents: {e}")
+                with results_lock:
+                    results["allevents"] = {"events": [], "error": str(e)}
+        
+        def fetch_eventbrite():
+            try:
+                data = scrape_eventbrite(
+                    location=location,
+                    start_date=start_date,
+                    end_date=end_date,
+                    event_type=event_type,
+                    category=category,
+                    min_price=min_price,
+                    max_price=max_price,
+                )
+                with results_lock:
+                    results["eventbrite"] = data
+            except Exception as e:
+                print(f"Error fetching Eventbrite: {e}")
+                with results_lock:
+                    results["eventbrite"] = {"events": [], "error": str(e)}
+        
+        def fetch_openscraper():
+            try:
+                site_info = find_event_site_url(location)
+                site_url = site_info.get("url") if "error" not in site_info else None
+                if site_url:
+                    data = scrape_events_from_url(
+                        site_url,
+                        location,
+                        start_date=start_date,
+                        end_date=end_date,
+                        event_type=event_type,
+                        category=category,
+                        min_price=min_price,
+                        max_price=max_price,
+                    )
+                    if "error" in data or "_scrape_failure_reason" in data:
+                        data = {"events": []}
+                else:
+                    data = {"events": []}
+                with results_lock:
+                    results["openscraper"] = data
+            except Exception as e:
+                print(f"Error fetching OpenScraper: {e}")
+                with results_lock:
+                    results["openscraper"] = {"events": [], "error": str(e)}
+        
+        # Validation check
+        if lat is None and lon is None and not location:
+            error_msg = "Provide location (city, state) or lat and lon."
+            yield f"data: {json.dumps({'error': error_msg, 'progress': 0, 'total': 0})}\n\n"
+            return
+        
+        # Start threads for data fetching
+        threads = []
+        
+        t = threading.Thread(target=fetch_ticketmaster, daemon=True)
+        t.start()
+        threads.append(("Ticketmaster", t))
+        
+        if using_location:
+            t = threading.Thread(target=fetch_allevents, daemon=True)
+            t.start()
+            threads.append(("AllEvents", t))
+            
+            t = threading.Thread(target=fetch_eventbrite, daemon=True)
+            t.start()
+            threads.append(("Eventbrite", t))
+            
+            t = threading.Thread(target=fetch_openscraper, daemon=True)
+            t.start()
+            threads.append(("OpenScraper", t))
+        
+        # Wait for threads and send progress updates
+        completed = 0
+        for source_name, thread in threads:
+            thread.join()
+            completed += 1
+            progress_pct = int((completed / total_sources) * 100)
+            yield f"data: {json.dumps({'source': source_name, 'progress': progress_pct, 'status': 'completed'})}\n\n"
+        
+        # Combine results
+        tm_data = results.get("ticketmaster", {"events": []})
+        ae_data = results.get("allevents", {"events": []})
+        eb_data = results.get("eventbrite", {"events": []})
+        os_data = results.get("openscraper", {"events": []})
+        
+        combined_events = []
+        seen_event_keys = set()
+        
+        def get_event_key(name, date_str):
+            name_norm = str(name).lower().strip()
+            date_norm = str(date_str)[:10] if date_str else "unknown-date"
+            return f"{name_norm}|{date_norm}"
+        
+        for event in tm_data.get("events", []):
+            key = get_event_key(event.get("name"), event.get("date"))
+            if key not in seen_event_keys:
+                event["source"] = "Ticketmaster"
+                combined_events.append(event)
+                seen_event_keys.add(key)
+        
+        for event in ae_data.get("events", []):
+            key = get_event_key(event.get("name"), event.get("date"))
+            if key not in seen_event_keys:
+                combined_events.append(event)
+                seen_event_keys.add(key)
+        
+        for event in eb_data.get("events", []):
+            key = get_event_key(event.get("name"), event.get("date"))
+            if key not in seen_event_keys:
+                combined_events.append(event)
+                seen_event_keys.add(key)
+        
+        for event in os_data.get("events", []):
+            key = get_event_key(event.get("name"), event.get("date"))
+            if key not in seen_event_keys:
+                combined_events.append(event)
+                seen_event_keys.add(key)
+        
+        # Send final results
+        final_data = {
+            "events": combined_events,
+            "total": len(combined_events),
+            "progress": 100,
+            "status": "complete",
+            "ticketmaster_status": "error" if "error" in tm_data else "ok",
+            "allevents_status": "error" if "error" in ae_data else "ok",
+            "eventbrite_status": "error" if "error" in eb_data else "ok",
+            "openscraper_status": "error" if "error" in os_data else "ok",
+        }
+        yield f"data: {json.dumps(final_data)}\n\n"
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 @app.get("/api/direct-events")
 def get_direct_events(location: str):
