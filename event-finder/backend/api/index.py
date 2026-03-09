@@ -414,11 +414,11 @@ def get_events_stream(
             progress_pct = int((completed / total_sources) * 100)
             yield f"data: {json.dumps({'source': source_name, 'progress': progress_pct, 'status': 'completed'})}\n\n"
         
-        # Combine results
-        tm_data = results.get("ticketmaster", {"events": []})
-        ae_data = results.get("allevents", {"events": []})
-        eb_data = results.get("eventbrite", {"events": []})
-        os_data = results.get("openscraper", {"events": []})
+        # Combine results (treat missing/None providers as empty)
+        tm_data = results.get("ticketmaster") or {"events": []}
+        ae_data = results.get("allevents") or {"events": []}
+        eb_data = results.get("eventbrite") or {"events": []}
+        os_data = results.get("openscraper") or {"events": []}
         
         combined_events = []
         seen_event_keys = set()
