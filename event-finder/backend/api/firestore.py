@@ -19,6 +19,6 @@ def get_db():
         
     return firestore.client()
 
-# Remove the test initialization
-# db = get_db()
-# print("Successfully connected to Firestore!")
+# Test it out!
+db = get_db()
+print("Successfully connected to Firestore!")

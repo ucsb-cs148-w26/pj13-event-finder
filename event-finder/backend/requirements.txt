@@ -9,3 +9,4 @@ python-dateutil
 cloudscraper
 firebase-admin
 pydantic
+dotenv
