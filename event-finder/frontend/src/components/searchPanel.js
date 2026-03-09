@@ -7,6 +7,7 @@ import { US_STATES, CITIES_BY_STATE, POPULAR_CITIES } from "../utils/locationDat
  * When the user submits, it calls onSearch({ ...searchArgs }) and lets App do the fetch.
  */
 export default function SearchPanel({ onSearch, loading, onLocationPreviewChange, isSelectingLocationOnMap, hasSelectedLocation, onReselectLocation, fullWidthInLayout = false }) {
+  const [personalize, setPersonalize] = useState(false);
   const [stateQuery, setStateQuery] = useState("");
   const [selectedState, setSelectedState] = useState("");
   const [showStateTypeahead, setShowStateTypeahead] = useState(false);
@@ -178,6 +179,8 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
     endDate,
     // filters
     filters,
+    // router mode
+    personalize,
   });
 
   const onSubmit = (e) => {
@@ -637,6 +640,16 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
       <button type="submit" className="search-button" disabled={loading}>
         {loading ? "Searching..." : "Search Events"}
       </button>
+
+      <button
+        type="button"
+        onClick={() => setPersonalize((p) => !p)}
+        disabled={loading}
+        className="search-button"
+      >
+        Personalize: {personalize ? "On" : "Off"}
+      </button>      
+
     </form>
   );
 }

@@ -236,10 +236,20 @@ function App() {
 
       // Filters (backend expects first selected, per your original code)
       const f = searchArgs.filters || {};
-      if (f.eventType?.length > 0) params.append("event_type", f.eventType[0]);
-      if (f.category?.length > 0) params.append("category", f.category[0]);
+      //if (f.eventType?.length > 0) params.append("event_type", f.eventType[0]);
+      //if (f.category?.length > 0) params.append("category", f.category[0]);
+
+      if (Array.isArray(f.eventType) && f.eventType.length > 0){
+        f.eventType.forEach((v) => params.append("event_type", v));
+      }
+      if (Array.isArray(f.category) && f.category.length > 0){
+        f.category.forEach((v) => params.append("category", v));
+      }
+
       if (f.priceRange?.min) params.append("min_price", f.priceRange.min);
       if (f.priceRange?.max) params.append("max_price", f.priceRange.max);
+
+      if(searchArgs.personalize) params.append("personalize", "true");
 
       const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
       const apiUrl = `${backendUrl}/api/events?${params.toString()}`;

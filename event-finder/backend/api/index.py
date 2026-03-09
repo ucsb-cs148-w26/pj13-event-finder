@@ -1,9 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional
+from typing import Optional, List
 from dotenv import load_dotenv
 from api.llm_router import route_and_fetch_events
 from api import ticketmaster, allevents
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+import re
 
 load_dotenv()
 
@@ -91,7 +94,148 @@ def search_events(
     )
     return {"events": res.get("events", []), "total": res.get("total", 0)}
     
-    
+def _norm(s: str) -> str:
+    return re.sub(r"\s+", " ", s.strip().lower())
+
+def _parse_dt(value: Any) -> Optional[datetime]:
+    """Best-effort parse; returns None if unknown format."""
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        # Handles ISO-like: 2026-03-05T11:45, 2026-03-05T11:45:00, 2026-03-05 11:45
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            return None
+    return None
+
+def _extract_text_blob(event: Dict[str, Any]) -> str:
+    parts = []
+    for k in ("name", "title", "event_name", "description", "summary", "category", "type", "event_type"):
+        v = event.get(k)
+        if isinstance(v, str):
+            parts.append(v)
+        elif isinstance(v, list):
+            parts.extend([str(x) for x in v if x])
+    return _norm(" ".join(parts))
+
+def _extract_price_range(event: Dict[str, Any]) -> Tuple[Optional[float], Optional[float]]:
+    """
+    Return (min_price, max_price) if we can find it, else (None, None).
+    Supports a few common representations.
+    """
+    # Common direct keys
+    for min_k, max_k in [
+        ("min_price", "max_price"),
+        ("price_min", "price_max"),
+        ("minPrice", "maxPrice"),
+    ]:
+        if event.get(min_k) is not None or event.get(max_k) is not None:
+            try:
+                mn = float(event[min_k]) if event.get(min_k) is not None else None
+            except Exception:
+                mn = None
+            try:
+                mx = float(event[max_k]) if event.get(max_k) is not None else None
+            except Exception:
+                mx = None
+            return mn, mx
+
+    # Ticketmaster-like: priceRanges: [{"min": 20, "max": 80}]
+    pr = event.get("priceRanges")
+    if isinstance(pr, list) and pr:
+        obj = pr[0] if isinstance(pr[0], dict) else None
+        if obj:
+            try:
+                mn = float(obj["min"]) if obj.get("min") is not None else None
+            except Exception:
+                mn = None
+            try:
+                mx = float(obj["max"]) if obj.get("max") is not None else None
+            except Exception:
+                mx = None
+            return mn, mx
+
+    return None, None
+
+def _extract_start_end(event: Dict[str, Any]) -> Tuple[Optional[datetime], Optional[datetime]]:
+    # Try common keys
+    start = _parse_dt(event.get("start") or event.get("start_date") or event.get("startDate") or event.get("datetime"))
+    end = _parse_dt(event.get("end") or event.get("end_date") or event.get("endDate"))
+    return start, end
+
+def _matches_any_token(text_blob: str, tokens: List[str]) -> bool:
+    # tokens already normalized
+    return any(t in text_blob for t in tokens)
+
+def apply_post_filters(
+    events: List[Dict[str, Any]],
+    event_types: Optional[List[str]] = None,
+    categories: Optional[List[str]] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    durations: Optional[List[str]] = None,  # e.g. ["Less than 2 hours", "2-4 hours"]
+) -> List[Dict[str, Any]]:
+    """
+    Conservative filtering:
+    - If we can't determine a field for an event (e.g., no price info), we keep it rather than incorrectly dropping it.
+    """
+    types_norm = [_norm(x) for x in (event_types or []) if x]
+    cats_norm = [_norm(x) for x in (categories or []) if x]
+    durs_norm = [_norm(x) for x in (durations or []) if x]
+
+    out = []
+    for e in events:
+        blob = _extract_text_blob(e)
+
+        # event type/category match: if user selected any, event must match at least one
+        if types_norm and not _matches_any_token(blob, types_norm):
+            continue
+        if cats_norm and not _matches_any_token(blob, cats_norm):
+            continue
+
+        # price filter (best effort)
+        if min_price is not None or max_price is not None:
+            ev_min, ev_max = _extract_price_range(e)
+            # If event has no price info, don't drop it (conservative).
+            if ev_min is not None or ev_max is not None:
+                # If only one side exists, treat it as both for overlap checks
+                low = ev_min if ev_min is not None else ev_max
+                high = ev_max if ev_max is not None else ev_min
+                if low is None or high is None:
+                    pass
+                else:
+                    if min_price is not None and high < float(min_price):
+                        continue
+                    if max_price is not None and low > float(max_price):
+                        continue
+
+        # duration filter (only if we can compute duration)
+        if durs_norm:
+            start, end = _extract_start_end(e)
+            if start and end:
+                hours = (end - start).total_seconds() / 3600.0
+                ok = False
+                for d in durs_norm:
+                    if "less than 2" in d and hours < 2:
+                        ok = True
+                    elif "2-4" in d and 2 <= hours <= 4:
+                        ok = True
+                    elif "4+" in d and hours >= 4:
+                        ok = True
+                    elif "multi-day" in d and hours >= 24:
+                        ok = True
+                if not ok:
+                    continue
+            # If we can't compute duration, keep event (conservative).
+
+        out.append(e)
+
+    return out
+
+
 @app.get("/api/events")
 def get_events(
     location: Optional[str] = None,
@@ -100,19 +244,49 @@ def get_events(
     radius: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    event_type: Optional[str] = None,
-    category: Optional[str] = None,
+    event_type: Optional[List[str]] = Query(None),
+    category: Optional[List[str]] = Query(None),
     min_price: Optional[float] = None,
-    max_price: Optional[float] = None
+    max_price: Optional[float] = None,
+    personalize : bool = False,
 ):
     if lat is None and lon is None and not location:
         return {"error": "Provide location (city, state) or lat and lon.", "events": []}
+    
+    event_type_one = event_type[0] if event_type else None
+    category_one = category[0] if category else None
+
+    if personalize:
+        if not location:
+            return {"error": "Personalization requires a location.", "events": []
+            }
+        res = route_and_fetch_events(
+            location=location,
+            start_date=start_date,
+            end_date=end_date,
+            event_types=event_type or [],
+            categories=category or [],
+            min_price=min_price,
+            max_price=max_price,
+        )
+        personalized_events = res.get("events", [])
+        personalized_events = apply_post_filters(
+            personalized_events,
+            event_types=None,
+            categories=None,
+            min_price=min_price,
+            max_price=max_price,
+            durations=None,
+        )
+
+        return {"events": personalized_events, "total": len(personalized_events)}
+
     tm_data = ticketmaster.fetch_events(
         location=location or "",
         start_date=start_date,
         end_date=end_date,
-        event_type=event_type,
-        category=category,
+        event_type=event_type_one,
+        category=category_one,
         min_price=min_price,
         max_price=max_price,
         lat=lat,
@@ -125,8 +299,8 @@ def get_events(
             location=location,
             start_date=start_date,
             end_date=end_date,
-            event_type=event_type,
-            category=category,
+            event_type=event_type_one,
+            category=category_one,
             min_price=min_price,
             max_price=max_price,
         )
@@ -157,6 +331,19 @@ def get_events(
     
     print("TM events:", tm_count)
     print("AE events:", ae_count)
+
+    print("before filter:", len(combined_events))
+
+    combined_events = apply_post_filters(
+        combined_events,
+        event_types=event_type if isinstance(event_type, list) else ([event_type] if event_type else []),
+        categories=category if isinstance(category, list) else ([category] if category else []),
+        min_price=min_price,
+        max_price=max_price,
+        durations=None,  # add later if you wire duration into the request
+    )
+
+    print("after filter:", len(combined_events))
 
     return {
         "ticketmaster_status": "error" if "error" in tm_data else "ok",
