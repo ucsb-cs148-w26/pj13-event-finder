@@ -7,6 +7,7 @@ from api.llm_router import route_and_fetch_events
 from api import ticketmaster, allevents
 from api.open_scraper import find_event_site_url, scrape_events_from_url
 from api.eventbrite_scraper import scrape_eventbrite
+from firebase_database.cache import check_cache, store_cache, apply_local_filters
 import json
 import threading
 
@@ -112,14 +113,43 @@ def get_events(
 ):
     if lat is None and lon is None and not location:
         return {"error": "Provide location (city, state) or lat and lon.", "events": []}
+
+    # --- CACHE CHECK (location-string queries only) ---
+    use_cache = bool(location)
+    if use_cache:
+        cached_events = check_cache(location, start_date, end_date)
+        if cached_events is not None:
+            filtered = apply_local_filters(
+                cached_events, event_type, category, min_price, max_price
+            )
+            print(f"[cache] HIT for '{location}' — {len(cached_events)} cached, {len(filtered)} after filters")
+            return {
+                "from_cache": True,
+                "ticketmaster_status": "cached",
+                "allevents_status": "cached",
+                "eventbrite_status": "cached",
+                "openscraper_status": "cached",
+                "events": filtered,
+                "total": len(filtered),
+            }
+
+    # --- CACHE MISS: fetch from sources ---
+    # For cacheable queries, omit category/type/price filters so we store
+    # the broadest possible dataset.  Date range is still passed because it
+    # defines the *scope* of the query, not a post-hoc filter.
+    fetch_event_type = None if use_cache else event_type
+    fetch_category = None if use_cache else category
+    fetch_min_price = None if use_cache else min_price
+    fetch_max_price = None if use_cache else max_price
+
     tm_data = ticketmaster.fetch_events(
         location=location or "",
         start_date=start_date,
         end_date=end_date,
-        event_type=event_type,
-        category=category,
-        min_price=min_price,
-        max_price=max_price,
+        event_type=fetch_event_type,
+        category=fetch_category,
+        min_price=fetch_min_price,
+        max_price=fetch_max_price,
         lat=lat,
         lon=lon,
         radius=radius,
@@ -133,19 +163,19 @@ def get_events(
             location=location,
             start_date=start_date,
             end_date=end_date,
-            event_type=event_type,
-            category=category,
-            min_price=min_price,
-            max_price=max_price,
+            event_type=fetch_event_type,
+            category=fetch_category,
+            min_price=fetch_min_price,
+            max_price=fetch_max_price,
         )
         eb_data = scrape_eventbrite(
             location=location,
             start_date=start_date,
             end_date=end_date,
-            event_type=event_type,
-            category=category,
-            min_price=min_price,
-            max_price=max_price,
+            event_type=fetch_event_type,
+            category=fetch_category,
+            min_price=fetch_min_price,
+            max_price=fetch_max_price,
         )
         site_info = find_event_site_url(location)
         site_url = site_info.get("url") if "error" not in site_info else None
@@ -155,14 +185,16 @@ def get_events(
                 location,
                 start_date=start_date,
                 end_date=end_date,
-                event_type=event_type,
-                category=category,
-                min_price=min_price,
-                max_price=max_price,
+                event_type=fetch_event_type,
+                category=fetch_category,
+                min_price=fetch_min_price,
+                max_price=fetch_max_price,
             )
             if "error" in os_data or "_scrape_failure_reason" in os_data:
-                os_data = {"events": []}
                 print("Open scraper failed for URL:", site_url, "Reason:", os_data.get("error") or os_data.get("_scrape_failure_reason"))
+                os_data = {"events": []}
+
+    # --- COMBINE + DEDUPLICATE ---
     combined_events = []
     seen_event_keys = set()
     tm_count = 0
@@ -209,13 +241,24 @@ def get_events(
     print("EB events:", eb_count)
     print("OS events:", os_count)
 
+    # --- STORE IN CACHE ---
+    if use_cache:
+        store_cache(location, start_date, end_date, combined_events)
+
+    # --- APPLY FILTERS LOCALLY ---
+    if use_cache:
+        combined_events = apply_local_filters(
+            combined_events, event_type, category, min_price, max_price
+        )
+
     return {
+        "from_cache": False,
         "ticketmaster_status": "error" if "error" in tm_data else "ok",
         "allevents_status": "error" if "error" in ae_data else "ok",
         "eventbrite_status": "error" if "error" in eb_data else "ok",
         "openscraper_status": "error" if "error" in os_data else "ok",
         "events": combined_events,
-        "total": len(combined_events)
+        "total": len(combined_events),
     }
 
 @app.get("/api/ticketmaster-event")
