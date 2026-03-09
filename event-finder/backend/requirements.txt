@@ -7,3 +7,5 @@ openai
 beautifulsoup4
 python-dateutil
 cloudscraper
+firebase-admin
+pydantic

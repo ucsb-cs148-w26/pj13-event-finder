@@ -65,6 +65,7 @@ function App() {
   const [isSelectingLocationOnMap, setIsSelectingLocationOnMap] = useState(false); // true when waiting for user to click on map to place pin
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [uploadInputText, setUploadInputText] = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState(false);  // show green check on successful submission
   // event detail modal state
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailEvent, setDetailEvent] = useState(null);
@@ -345,7 +346,11 @@ function App() {
         {/* Top-left Upload button (only when signed in) */}
         {user && (
           <div className="absolute top-4 left-4 flex items-center">
-            <button type="button" className="sign-in-btn" onClick={() => setUploadModalOpen(true)}>
+            <button type="button" className="sign-in-btn" onClick={() => {
+                setUploadModalOpen(true);
+                setUploadInputText("");
+                setUploadSuccess(false);
+              }}>
               Upload URL
             </button>
           </div>
@@ -397,7 +402,7 @@ function App() {
       {uploadModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-          onClick={() => setUploadModalOpen(false)}
+          onClick={() => { setUploadModalOpen(false); setUploadSuccess(false); }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="upload-modal-title"
@@ -409,14 +414,21 @@ function App() {
             <h2 id="upload-modal-title" className="text-lg font-semibold text-gray-800 mt-0 mb-4">
               Upload URL
             </h2>
-            <input
-              type="text"
-              value={uploadInputText}
-              onChange={(e) => setUploadInputText(e.target.value)}
-              placeholder="Enter text..."
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 mb-4"
-              autoFocus
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={uploadInputText}
+                onChange={(e) => setUploadInputText(e.target.value)}
+                placeholder="Enter event website URL..."
+                className={`w-full px-4 py-2.5 border rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 mb-4 ${uploadSuccess ? 'border-green-500' : 'border-gray-300'}`}
+                autoFocus
+              />
+              {uploadSuccess && (
+                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500 text-xl">
+                  ✓
+                </span>
+              )}
+            </div>
             <div className="flex justify-end gap-2">
               <button
                 type="button"
@@ -424,6 +436,7 @@ function App() {
                 onClick={() => {
                   setUploadModalOpen(false);
                   setUploadInputText("");
+                  setUploadSuccess(false);
                 }}
               >
                 Cancel
@@ -431,9 +444,48 @@ function App() {
               <button
                 type="button"
                 className="sign-in-btn"
-                onClick={() => {
-                  setUploadModalOpen(false);
-                  setUploadInputText("");
+                onClick={async () => {
+                  if (!uploadInputText.trim()) {
+                    alert("Please enter a URL");
+                    return;
+                  }
+                  
+                  try {
+                    const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+                    const response = await fetch(`${backendUrl}/api/upload-url`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        url: uploadInputText.trim(),
+                        user_email: user?.email || null
+                      })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.error) {
+                      alert(`Error: ${result.error}`);
+                      setUploadSuccess(false);
+                    } else {
+                      alert(result.message);
+                      setUploadSuccess(true);
+                      setUploadInputText("");
+                      // clear check after a few seconds and auto-close modal
+                      setTimeout(() => {
+                        setUploadSuccess(false);
+                      }, 3000);
+                      setTimeout(() => {
+                        setUploadModalOpen(false);
+                      }, 2000);
+                    }
+                  } catch (error) {
+                    console.error('Upload error:', error);
+                    alert('Failed to upload URL. Please try again.');
+                    setUploadSuccess(false);
+                    // keep modal open so user can retry
+                  }
                 }}
               >
                 Submit
