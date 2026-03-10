@@ -7,6 +7,7 @@ import { US_STATES, CITIES_BY_STATE, POPULAR_CITIES } from "../utils/locationDat
  * When the user submits, it calls onSearch({ ...searchArgs }) and lets App do the fetch.
  */
 export default function SearchPanel({ onSearch, loading, onLocationPreviewChange, isSelectingLocationOnMap, hasSelectedLocation, onReselectLocation, fullWidthInLayout = false }) {
+  const [personalize, setPersonalize] = useState(false);
   const [stateQuery, setStateQuery] = useState("");
   const [selectedState, setSelectedState] = useState("");
   const [showStateTypeahead, setShowStateTypeahead] = useState(false);
@@ -178,6 +179,8 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
     endDate,
     // filters
     filters,
+    // router mode
+    personalize,
   });
 
   const onSubmit = (e) => {
@@ -475,24 +478,46 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
             </span>
           )}
 
-          <div className="flex items-center justify-between gap-3">
-            {/* Bottom-left: Show/Hide Filters */}
-            <button
-              type="button"
-              onClick={() => setShowFilters(!showFilters)}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-transparent hover:bg-white/60 border border-gray-300 rounded-lg transition-all"
-            >
-              {showFilters ? "Hide" : "Show"} Filters
-            </button>
+          <div className="mt-auto flex flex-col gap-3">
+            {usePreciseLocation && (
+              <span className="text-sm text-gray-600">
+                {preciseLocationLoading && "Getting location…"}
+                {!preciseLocationLoading && preciseLocationError && (
+                  <span className="text-red-600"> {preciseLocationError}</span>
+                )}
+              </span>
+            )}
 
-            {/* Bottom-right: Submit */}
-            <button
-              type="submit"
-              className="search-button panel-btn"
-              disabled={loading}
-            >
-              {loading ? "Searching..." : "Search Events"}
-            </button>
+            <div className="flex items-center justify-between gap-3">
+              {/* Left side buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-transparent hover:bg-white/60 border border-gray-300 rounded-lg transition-all"
+                >
+                  {showFilters ? "Hide" : "Show"} Filters
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPersonalize((p) => !p)}
+                  disabled={loading}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-transparent hover:bg-white/60 border border-gray-300 rounded-lg transition-all"
+                >
+                  Personalize: {personalize ? "On" : "Off"}
+                </button>
+              </div>
+
+              {/* Right side submit */}
+              <button
+                type="submit"
+                className="search-button panel-btn"
+                disabled={loading}
+              >
+                {loading ? "Searching..." : "Search Events"}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -644,7 +669,7 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
             </div>
           </div>
         </div>
-      )}
+      )}     
     </form>
   );
 }

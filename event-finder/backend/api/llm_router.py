@@ -1,26 +1,3 @@
-"""
-/api/router-test?location=Los%20Angeles&start_date=2026-02-01T00:00&end_date=2026-03-01T00:00
-^Use for testing API endpoint
-backend/api/llm_router.py
-
-LLM-based API router for event providers.
-
-What it does:
-1) Uses OpenAI (Structured Outputs) to decide which provider(s) to query
-2) Calls the chosen provider fetch functions
-3) Normalizes + dedupes events
-4) Returns a single combined JSON response
-
-How to run standalone:
-  cd backend
-  python -m api.llm_router
-
-Env vars:
-- OPENAI_API_KEY=...
-- TICKETMASTER_API_KEY=...
-- (optional) OPENAI_ROUTER_MODEL=gpt-4.1-mini
-- (optional) ROUTER_REQUIRE_OPENAI=true   # if true, do NOT fall back to heuristics; raise errors instead
-"""
 
 from __future__ import annotations
 
@@ -28,7 +5,8 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
+from api import ticketmaster, allevents
+from api.eventbrite_scraper import scrape_eventbrite
 from dotenv import load_dotenv
 
 # Load backend/.env reliably regardless of current working directory
@@ -41,9 +19,6 @@ try:
 except ImportError:
     OpenAI = None  # type: ignore
 
-# Your existing provider(s)
-from api import ticketmaster
-
 ProviderName = str
 
 # Default to a commonly available API model. Override via OPENAI_ROUTER_MODEL if you want.
@@ -53,33 +28,49 @@ OPENAI_MODEL = os.getenv("OPENAI_ROUTER_MODEL", "gpt-4.1-mini")
 REQUIRE_OPENAI = os.getenv("ROUTER_REQUIRE_OPENAI", "false").strip().lower() in {"1", "true", "yes", "y"}
 
 
-# ----------------------------
-# Provider adapters (registry)
-# ----------------------------
+ROUTER_DEBUG = os.getenv("ROUTER_DEBUG", "0") == "1"
+
+def _router_log(label: str, obj) -> None:
+    if not ROUTER_DEBUG:
+        return
+    try:
+        print(f"[router:{label}] {json.dumps(obj, default=str)[:4000]}")
+    except Exception:
+        print(f"[router:{label}] {obj}")
 
 def _ticketmaster_adapter(**kwargs) -> Dict[str, Any]:
     return ticketmaster.fetch_events(**kwargs)
 
+def _allevents_adapter(**kwargs):
+    return allevents.fetch_events(
+        location=kwargs.get("location", ""),
+        start_date=kwargs.get("start_date"),
+        end_date=kwargs.get("end_date"),
+        event_type=kwargs.get("event_type"),
+        category=kwargs.get("category"),
+        min_price=kwargs.get("min_price"),
+        max_price=kwargs.get("max_price"),
+    )
 
-def _eventbrite_adapter(**kwargs) -> Dict[str, Any]:
-    """
-    Placeholder for an Eventbrite provider.
 
-    When you implement it, create:
-      backend/api/eventbrite.py
-    with:
-      def fetch_events(...) -> {"events": [...], "total": int, ...}
+def _eventbrite_adapter(**kwargs):
+    return scrape_eventbrite(
+        location=kwargs.get("location", ""),
+        start_date=kwargs.get("start_date"),
+        end_date=kwargs.get("end_date"),
+        event_type=kwargs.get("event_type"),
+        category=kwargs.get("category"),
+        min_price=kwargs.get("min_price"),
+        max_price=kwargs.get("max_price"),
+    )
 
-    Then replace this stub with:
-      from api import eventbrite
-      return eventbrite.fetch_events(**kwargs)
-    """
-    return {"events": [], "total": 0, "warning": "Eventbrite provider not implemented yet"}
 
 
 PROVIDERS: Dict[ProviderName, Any] = {
     "ticketmaster": _ticketmaster_adapter,
     "eventbrite": _eventbrite_adapter,
+    "allevents": _allevents_adapter,
+    
     # Add more providers later
 }
 
@@ -93,14 +84,17 @@ def _heuristic_router(
     location: str,
     start_date: Optional[str],
     end_date: Optional[str],
-    event_type: Optional[str],
-    category: Optional[str],
+    event_types: Optional[List[str]],
+    categories: Optional[List[str]],
     min_price: Optional[float],
     max_price: Optional[float],
 ) -> Dict[str, Any]:
+    types = {t.strip().lower() for t in (event_types or []) if t}
+    cats = {c.strip().lower() for c in (categories or []) if c}
+
     tm_types = {"sports", "concert", "theater"}
-    if (event_type and event_type.lower() in tm_types) or (category and category.lower() in {"music"}):
-        return {"providers": ["ticketmaster"], "reason": "Heuristic: likely a large/organized event type."}
+    if types.intersection(tm_types) or ("music" in cats):
+        return {"providers": ["ticketmaster"], "reason": "Heuristic: large/organized event types selected."}
 
     return {
         "providers": ["eventbrite", "ticketmaster"],
@@ -108,37 +102,29 @@ def _heuristic_router(
     }
 
 
-# ----------------------------
-# LLM routing (Structured Outputs)
-# ----------------------------
 
 def _llm_choose_providers(
     *,
     location: str,
     start_date: Optional[str],
     end_date: Optional[str],
-    event_type: Optional[str],
-    category: Optional[str],
+    event_types: Optional[List[str]],
+    categories: Optional[List[str]],
     min_price: Optional[float],
     max_price: Optional[float],
 ) -> Dict[str, Any]:
-    """
-    Returns:
-      {
-        "providers": ["ticketmaster", "eventbrite"],
-        "weights": {"ticketmaster": 0.7, "eventbrite": 0.3},  # optional
-        "reason": "..."
-      }
-    """
+
     user_context = {
         "location": location,
         "start_date": start_date,
         "end_date": end_date,
-        "event_type": event_type,
-        "category": category,
+        "event_types": event_types or [],
+        "categories": categories or [],
         "min_price": min_price,
         "max_price": max_price,
     }
+
+    _router_log("input", user_context)
 
     api_key = os.getenv("OPENAI_API_KEY", "")
     key_loaded = bool(api_key)
@@ -158,13 +144,22 @@ def _llm_choose_providers(
             if not sdk_available:
                 missing.append("openai package")
             raise RuntimeError(f"OpenAI routing required but missing: {', '.join(missing)}")
-        return _heuristic_router(**user_context)
+
+        fallback = _heuristic_router(**user_context)
+        fallback["_router_used"] = "heuristic_missing_openai"
+        _router_log("decision", {
+            "used": fallback["_router_used"],
+            "providers": fallback.get("providers"),
+            "reason": fallback.get("reason"),
+        })
+        return fallback
 
     client = OpenAI(api_key=api_key)
 
     provider_list = sorted(PROVIDERS.keys())
+    providers_min = 2 if len(provider_list) >= 2 else 1
+    providers_max = min(4, len(provider_list))
 
-    # Responses API Structured Outputs format:
     response_format = {
         "type": "json_schema",
         "name": "event_provider_routing",
@@ -176,8 +171,8 @@ def _llm_choose_providers(
                 "providers": {
                     "type": "array",
                     "items": {"type": "string", "enum": provider_list},
-                    "minItems": 1,
-                    "maxItems": min(3, len(provider_list)),
+                    "minItems": providers_min,
+                    "maxItems": providers_max,
                 },
                 "weights": {
                     "type": "object",
@@ -190,16 +185,39 @@ def _llm_choose_providers(
         },
     }
 
-    instructions = f"""
-You are a router that chooses the best event provider APIs to call.
-Available providers: {provider_list}.
+    instructions = """
+- allevents: Best for broad local/community listings and “what's happening” coverage, especially when filters are broad or unclear.
+- websearch: Best for niche/very local/uncategorized events, or when filters are sparse and you need extra recall beyond event databases.
 
-Routing guidance:
-- Use "ticketmaster" for big, formally organized events (major concerts, sports, large venues).
-- Use "eventbrite" for local/community/smaller events (meetups, workshops, local gatherings).
-- If uncertain, choose up to TWO providers to improve recall.
+Goal:
+- Maximize relevant coverage for the selected filters. Multiple selections use OR semantics: show events matching ANY selected event_type/category.
+- Prefer a diversified provider set so you capture both “big ticketed” and “local community” versions of the same filter (e.g., concerts can exist on Ticketmaster and locally via AllEvents/Eventbrite).
 
-Return JSON that matches the schema exactly.
+Routing rules (filters-only):
+1) Use ONLY the filters provided. Do NOT invent intent, preferences, or context.
+2) OR semantics: if multiple event_types/categories are selected, ensure the chosen providers together cover ANY of the selected filters.
+3) Always choose 2-4 providers when possible. Avoid returning only one provider; if one provider is strongly indicated (e.g., Ticketmaster for sports), still include at least one complementary local/community provider if relevant results are plausible.
+4) Ticketmaster signals: if event_types/categories include sports, concert/music, theater, comedy, major festivals, ticketed/venue-style events → include ticketmaster.
+5) Eventbrite signals: if event_types/categories include workshop, class, meetup, networking, conference, seminar, training → include eventbrite.
+6) AllEvents signals: if filters indicate community/local/family/holiday, broad “things to do”, or if the city is smaller/mid-sized → include allevents.
+7) Websearch signals: if filters are empty, “other”, very niche/unusual, or the query is likely missing from event databases → include websearch.
+8) Price range guidance:
+   - If max_price is low (free/cheap) and filters are community-style → lean toward eventbrite/allevents/websearch in addition to any other provider.
+   - If price range is moderate/high and filters suggest ticketed events → ticketmaster weight higher but do not exclude local providers.
+9) Weights (how many results to prefer from each provider):
+   - Return a weights object with a 0-1 value for each chosen provider.
+   - Weights should reflect “more from Ticketmaster” vs “more from local/community sources” based strictly on the filters.
+   - Example: for concerts/music in a big city: ticketmaster ~0.6-0.8, allevents/eventbrite/websearch split remaining.
+   - For workshops/classes: eventbrite ~0.5-0.7, allevents ~0.2-0.4, optional websearch small.
+   - For “other” or empty filters: allevents + websearch dominate; ticketmaster optional small if the city is large.
+   - Ensure the chosen weights sum to 1 (or very close, within rounding).
+
+Output format (JSON only):
+{
+  "providers": ["ticketmaster" | "eventbrite" | "allevents" | "websearch", ...],   // 2-4 items (unless fewer exist)
+  "weights": {"providerA": 0.0-1.0, "providerB": 0.0-1.0, ...},  // example values only; should roughly sum to 1
+  "reason": "One short sentence referencing only the filters (types/categories/price/time window)."
+}
 """.strip()
 
     try:
@@ -214,9 +232,15 @@ Return JSON that matches the schema exactly.
         )
         parsed = json.loads(resp.output_text)
         parsed["_router_used"] = "openai"
+
+        _router_log("decision", {
+            "used": "openai",
+            "providers": parsed.get("providers"),
+            "reason": parsed.get("reason"),
+        })
     except Exception as e:
-        # IMPORTANT: make failures visible (so you don't think it's "using OpenAI" when it isn't)
         print("OpenAI router failed. Error:", repr(e))
+        _router_log("openai_error", {"model": OPENAI_MODEL, "error": repr(e)})
 
         if REQUIRE_OPENAI:
             raise RuntimeError(f"OpenAI routing failed (model={OPENAI_MODEL}): {e}") from e
@@ -224,9 +248,15 @@ Return JSON that matches the schema exactly.
         fallback = _heuristic_router(**user_context)
         fallback["_router_used"] = "heuristic_fallback_after_openai_error"
         fallback["_openai_error"] = repr(e)
+
+        _router_log("decision", {
+            "used": fallback["_router_used"],
+            "providers": fallback.get("providers"),
+            "reason": fallback.get("reason"),
+        })
+
         return fallback
 
-    # Sanity: ensure providers exist
     parsed["providers"] = [p for p in parsed.get("providers", []) if p in PROVIDERS]
     if not parsed["providers"]:
         if REQUIRE_OPENAI:
@@ -237,10 +267,6 @@ Return JSON that matches the schema exactly.
 
     return parsed
 
-
-# ----------------------------
-# Fetch + normalize + dedupe
-# ----------------------------
 
 def _normalize_event(provider: str, e: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(e)
@@ -287,8 +313,8 @@ def route_and_fetch_events(
     location: str,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    event_type: Optional[str] = None,
-    category: Optional[str] = None,
+    event_types: Optional[List[str]] = None,
+    categories: Optional[List[str]] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
 ) -> Dict[str, Any]:
@@ -296,8 +322,8 @@ def route_and_fetch_events(
         location=location,
         start_date=start_date,
         end_date=end_date,
-        event_type=event_type,
-        category=category,
+        event_types=event_types,
+        categories=categories,
         min_price=min_price,
         max_price=max_price,
     )
@@ -307,15 +333,15 @@ def route_and_fetch_events(
     all_events: List[Dict[str, Any]] = []
     errors: Dict[str, str] = {}
 
-    kwargs = dict(
-        location=location,
-        start_date=start_date,
-        end_date=end_date,
-        event_type=event_type,
-        category=category,
-        min_price=min_price,
-        max_price=max_price,
-    )
+    def _merge_results(provider: str, res: Dict[str, Any]) -> None:
+        provider_results[provider] = {"total": res.get("total", 0)}
+        if res.get("warning"):
+            provider_results[provider]["warning"] = res["warning"]
+        if res.get("error"):
+            errors[provider] = str(res["error"])
+
+        for e in (res.get("events") or []):
+            all_events.append(_normalize_event(provider, e))
 
     for provider in chosen:
         adapter = PROVIDERS.get(provider)
@@ -323,16 +349,42 @@ def route_and_fetch_events(
             continue
 
         try:
-            res = adapter(**kwargs)
-            provider_results[provider] = {"total": res.get("total", 0)}
+            if provider == "ticketmaster":
+                selected_types = [t for t in (event_types or []) if t]
 
-            if res.get("warning"):
-                provider_results[provider]["warning"] = res["warning"]
-            if res.get("error"):
-                errors[provider] = str(res["error"])
+                if not selected_types:
+                    selected_types = [None]
+                else:
+                    selected_types = selected_types[:3]
 
-            for e in (res.get("events") or []):
-                all_events.append(_normalize_event(provider, e))
+                provider_results[provider] = {"calls": len(selected_types), "total": 0}
+                added_before = len(all_events)
+
+                for t in selected_types:
+                    res = adapter(
+                        location=location,
+                        start_date=start_date,
+                        end_date=end_date,
+                        event_type=t,
+                        category=None,    
+                        min_price=min_price,
+                        max_price=max_price,
+                    )
+                    _merge_results(provider, res)
+
+                provider_results[provider]["added_events"] = len(all_events) - added_before
+
+            else:
+                res = adapter(
+                    location=location,
+                    start_date=start_date,
+                    end_date=end_date,
+                    event_type=None,
+                    category=None,
+                    min_price=min_price,
+                    max_price=max_price,
+                )
+                _merge_results(provider, res)
 
         except Exception as ex:
             errors[provider] = str(ex)

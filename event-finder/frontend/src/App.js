@@ -246,12 +246,62 @@ function App() {
 
       // Filters (backend expects first selected, per your original code)
       const f = searchArgs.filters || {};
-      if (f.eventType?.length > 0) params.append("event_type", f.eventType[0]);
-      if (f.category?.length > 0) params.append("category", f.category[0]);
+      //if (f.eventType?.length > 0) params.append("event_type", f.eventType[0]);
+      //if (f.category?.length > 0) params.append("category", f.category[0]);
+
+      if (Array.isArray(f.eventType) && f.eventType.length > 0){
+        f.eventType.forEach((v) => params.append("event_type", v));
+      }
+      if (Array.isArray(f.category) && f.category.length > 0){
+        f.category.forEach((v) => params.append("category", v));
+      }
+
       if (f.priceRange?.min) params.append("min_price", f.priceRange.min);
       if (f.priceRange?.max) params.append("max_price", f.priceRange.max);
 
+      if(searchArgs.personalize) params.append("personalize", "true");
+
       const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+      
+      if (searchArgs.personalize) {
+        const apiUrl = `${backendUrl}/api/events?${params.toString()}`;
+        console.log("Personalized API URL:", apiUrl);
+
+        const res = await fetch(apiUrl);
+        const data = await res.json();
+
+        console.log("Personalized response:", data);
+
+        if (!res.ok || data.error) {
+          setError(data.error || "Failed to fetch personalized events.");
+          setEvents([]);
+          setLoading(false);
+          return;
+        }
+
+        const nextEvents = data.events || [];
+        setEvents(nextEvents);
+
+        console.log("LLM debug:", {
+          router_used: data.router_used,
+          providers_called: data.providers_called,
+          routing_reason: data.routing_reason,
+          router_debug: data.router_debug,
+          errors: data.errors,
+          total: data.total,
+        });
+
+        setProgress(100);
+
+        if (nextEvents.length === 0) {
+          setError("No events found. Try adjusting your search criteria.");
+        }
+
+        setLoading(false);
+        return;
+      }
+
+
       const apiUrl = `${backendUrl}/api/events-stream?${params.toString()}`;
       console.log("API URL:", apiUrl);
 

@@ -61,7 +61,12 @@ export default function BookmarkStar({ user, event, className = "" }) {
   return (
     <button
       type="button"
-      onClick={toggle}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        toggle();
+      }}
       disabled={busy}
       aria-label={saved ? "Remove bookmark" : "Add bookmark"}
       title={saved ? "Bookmarked" : "Bookmark"}
