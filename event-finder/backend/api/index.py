@@ -530,6 +530,16 @@ def eventbrite_scrape(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
 ):
+    
+    return scrape_eventbrite(
+        location,
+        start_date=start_date,
+        end_date=end_date,
+        event_type=event_type,
+        category=category,
+        min_price=min_price,
+        max_price=max_price,
+    )
     """
     Scrapes Eventbrite for events in a given location.
     Usage: /api/eventbrite-scrape?location=santa barbara&start_date=2026-03-01&end_date=2026-04-01
