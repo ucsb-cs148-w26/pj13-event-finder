@@ -72,7 +72,7 @@ def search_events(
     event_type: Optional[str] = None,
     category: Optional[str] = None,
     min_price: Optional[float] = None,
-    max_price: Optional[float] = None
+    max_price: Optional[float] = None,
 ):
     if lat is not None and lon is not None:
         return ticketmaster.fetch_events(
@@ -279,8 +279,8 @@ def get_events(
         personalized_events = res.get("events", [])
         personalized_events = apply_post_filters(
             personalized_events,
-            event_types=None,
-            categories=None,
+            event_types= [],
+            categories= [],
             min_price=min_price,
             max_price=max_price,
             durations=None,
@@ -474,7 +474,7 @@ def get_events_stream(
     event_type: Optional[str] = None,
     category: Optional[str] = None,
     min_price: Optional[float] = None,
-    max_price: Optional[float] = None
+    max_price: Optional[float] = None,
 ):
     """
     Stream events with progress updates. Fetches from multiple sources in parallel
