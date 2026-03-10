@@ -9,3 +9,5 @@ python-dateutil
 cloudscraper
 firebase-admin
 dotenv
+datetime
+urlparse
