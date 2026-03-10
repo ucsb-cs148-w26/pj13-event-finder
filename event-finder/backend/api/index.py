@@ -288,8 +288,11 @@ def get_events(
 
         return {
           "from_cache": False,
-          "router_used": res.get("routing:", {}).get("_router_used"),
+          "router_used": res.get("routing", {}).get("_router_used"),
           "providers_called": res.get("providers_called"),
+          "routing_reason": res.get("routing", {}).get("reason"),
+          "router_debug": res.get("routing"),
+          "errors": res.get("errors"),
           "events": personalized_events,
           "total": len(personalized_events),
         }
