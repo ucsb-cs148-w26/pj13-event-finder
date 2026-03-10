@@ -92,8 +92,7 @@ def fetch_events(
                 cat_query = category.lower()
                 if cat_query not in ev["name"].lower() and cat_query not in ev["description"].lower():
                     continue
-                    
-            ev.pop("description", None) 
+            # keep the description property so the UI can show it in a modal
             filtered_events.append(ev)
                 
         return {"events": filtered_events, "total": len(filtered_events), "source": "allevents"}

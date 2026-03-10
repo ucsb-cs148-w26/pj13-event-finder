@@ -215,10 +215,10 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
       onSubmit={onSubmit}
     >
       {/* Glassmorphic Search Card */}
-      <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
-        {/* Top row: switch on the far left in its own area */}
+      <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl flex flex-col p-6 min-h-[500px]">
+        {/* Top row: Search By and (when Location) location source on same row */}
         <div className="flex flex-col gap-1.5 mb-4 pb-3 border-b border-gray-200/60">
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-row flex-wrap items-end gap-4 w-fit">
             <div>
               <span className="text-sm font-semibold text-gray-700">Search By</span>
               <div className="flex rounded-lg border border-gray-300 bg-gray-100/80 p-0.5 shrink-0 w-fit mt-1">
@@ -247,9 +247,9 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
               </div>
             </div>
             {usePreciseLocation && (
-              <div className="flex items-center gap-2">
+              <div>
                 <span className="text-sm font-semibold text-gray-700">Location</span>
-                <div className="flex rounded-lg border border-gray-300 bg-gray-100/80 p-0.5 shrink-0">
+                <div className="flex rounded-lg border border-gray-300 bg-gray-100/80 p-0.5 shrink-0 w-fit mt-1">
                   <button
                     type="button"
                     onClick={() => setUseMyLocation(true)}
@@ -467,29 +467,41 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
           </div>
         )}
         {/* Additional Options */}
-        <div className="mt-4 flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            {usePreciseLocation && (
-              <span className="text-sm text-gray-600">
-                {preciseLocationLoading && "Getting location…"}
-                {!preciseLocationLoading && preciseLocationError && (
-                  <span className="text-red-600"> {preciseLocationError}</span>
-                )}
-              </span>
-            )}
+        <div className="mt-auto flex flex-col gap-3">
+          {/* Status line (optional) */}
+          {usePreciseLocation && (
+            <span className="text-sm text-gray-600">
+              {preciseLocationLoading && "Getting location…"}
+              {!preciseLocationLoading && preciseLocationError && (
+                <span className="text-red-600"> {preciseLocationError}</span>
+              )}
+            </span>
+          )}
+
+          <div className="flex items-center justify-between gap-3">
+            {/* Bottom-left: Show/Hide Filters */}
             <button
               type="button"
               onClick={() => setShowFilters(!showFilters)}
-              className="ml-auto px-4 py-2 text-sm font-medium text-gray-700 bg-transparent hover:bg-white/60 border border-gray-300 rounded-lg transition-all"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-transparent hover:bg-white/60 border border-gray-300 rounded-lg transition-all"
             >
               {showFilters ? "Hide" : "Show"} Filters
+            </button>
+
+            {/* Bottom-right: Submit */}
+            <button
+              type="submit"
+              className="search-button panel-btn"
+              disabled={loading}
+            >
+              {loading ? "Searching..." : "Search Events"}
             </button>
           </div>
         </div>
       </div>
 
       {showFilters && (
-        <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
+        <div className="mt-4 bg-white/80 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-3">
@@ -637,10 +649,6 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
         </div>
       )}
 
-      <button type="submit" className="search-button" disabled={loading}>
-        {loading ? "Searching..." : "Search Events"}
-      </button>
-
       <button
         type="button"
         onClick={() => setPersonalize((p) => !p)}
@@ -649,7 +657,6 @@ export default function SearchPanel({ onSearch, loading, onLocationPreviewChange
       >
         Personalize: {personalize ? "On" : "Off"}
       </button>      
-
     </form>
   );
 }

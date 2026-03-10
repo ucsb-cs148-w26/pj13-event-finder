@@ -1,8 +1,8 @@
 # Date of Retrospective: 03/04/26
 
 * Led by: Chris, scribed by Wendy 
-* Present: Chris, Charles, Wendy
-* Absent: Aavash, Whisper (will add to and review with them in following class)
+* Present: Chris, Charles, Wendy, Aavash, Whisper
+* Absent: None
 
 ## Start
 * Having more team check ins outside of class

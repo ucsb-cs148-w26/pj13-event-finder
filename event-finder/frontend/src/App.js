@@ -55,6 +55,7 @@ function App() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [progress, setProgress] = useState(0); // 0-100 for progress bar
   const [lastSearchArgs, setLastSearchArgs] = useState(null);
   const [selectedMarkerKey, setSelectedMarkerKey] = useState(null);
   const [locationPreview, setLocationPreview] = useState(null); // { lat, lng, radiusMiles } once we have coords; kept so preview map never unmounts
@@ -62,6 +63,13 @@ function App() {
   const [useMyLocationInPreview, setUseMyLocationInPreview] = useState(true);
   const [manualSearchCenter, setManualSearchCenter] = useState(null); // { lat, lng } when "select location" is used and user has placed pin
   const [isSelectingLocationOnMap, setIsSelectingLocationOnMap] = useState(false); // true when waiting for user to click on map to place pin
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [uploadInputText, setUploadInputText] = useState("");
+  // event detail modal state
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailEvent, setDetailEvent] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -144,6 +152,7 @@ function App() {
     setLoading(true);
     setError("");
     setEvents([]);
+    setProgress(0); // Reset progress
     setSelectedMarkerKey(null);
 
     try {
@@ -252,25 +261,51 @@ function App() {
       if(searchArgs.personalize) params.append("personalize", "true");
 
       const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-      const apiUrl = `${backendUrl}/api/events?${params.toString()}`;
+      const apiUrl = `${backendUrl}/api/events-stream?${params.toString()}`;
       console.log("API URL:", apiUrl);
 
-      const response = await fetch(apiUrl);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-      const data = await response.json();
-
-      if (data.error) {
-        setError(data.error);
-      } else {
-        const nextEvents = data.events || [];
-        setEvents(nextEvents);
-        if (nextEvents.length === 0) setError("No events found. Try adjusting your search criteria.");
-      }
+      // Use EventSource for streaming progress updates
+      const eventSource = new EventSource(apiUrl);
+      
+      eventSource.addEventListener("message", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("Received stream data:", data);
+          
+          // Update progress
+          if (data.progress !== undefined) {
+            setProgress(data.progress);
+          }
+          
+          // When complete, set events and close connection
+          if (data.status === "complete") {
+            if (data.error) {
+              setError(data.error);
+              setEvents([]);
+            } else {
+              const nextEvents = data.events || [];
+              setEvents(nextEvents);
+              if (nextEvents.length === 0) {
+                setError("No events found. Try adjusting your search criteria.");
+              }
+            }
+            setLoading(false);
+            eventSource.close();
+          }
+        } catch (parseErr) {
+          console.error("Error parsing stream data:", parseErr);
+        }
+      });
+      
+      eventSource.addEventListener("error", (event) => {
+        console.error("Stream error:", event);
+        setError("Failed to fetch events. Please try again.");
+        setLoading(false);
+        eventSource.close();
+      });
     } catch (err) {
       console.error("Search error:", err);
       setError(`Failed to search events: ${err.message}`);
-    } finally {
       setLoading(false);
     }
   };
@@ -284,6 +319,32 @@ function App() {
     setSelectedMarkerKey(null);
   };
 
+  // called when user clicks an event card
+  const handleEventClick = async (event) => {
+    setDetailEvent(event);
+    setDetailError("");
+    setDetailLoading(true);
+    setDetailModalOpen(true);
+
+    // if ticketmaster, fetch extra details
+    if (event.source === "Ticketmaster" && event.id) {
+      try {
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+        const res = await fetch(`${backendUrl}/api/ticketmaster-event?id=${encodeURIComponent(event.id)}`);
+        const data = await res.json();
+        if (data.error) {
+          setDetailError(data.error);
+        } else {
+          setDetailEvent((prev) => ({ ...prev, details: data.details || data }));
+        }
+      } catch (err) {
+        setDetailError(err.message || String(err));
+      }
+    }
+
+    setDetailLoading(false);
+  };
+
   return (
     <div
       className="min-h-screen flex flex-col app-bg"
@@ -291,6 +352,15 @@ function App() {
     >
       {/* ONE header */}
       <header className="bg-white/95 backdrop-blur-sm shadow-md py-8 px-4 text-center relative">
+        {/* Top-left Upload button (only when signed in) */}
+        {user && (
+          <div className="absolute top-4 left-4 flex items-center">
+            <button type="button" className="sign-in-btn" onClick={() => setUploadModalOpen(true)}>
+              Upload URL
+            </button>
+          </div>
+        )}
+
         {/* Top-right auth area */}
         <div className="absolute top-4 right-4 flex items-center gap-3">
           {user ? (
@@ -332,6 +402,110 @@ function App() {
         </h1>
         <p className="mt-2 mb-0 text-gray-600 text-lg">Find events in your area</p>
       </header>
+
+      {/* Upload modal */}
+      {uploadModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setUploadModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="upload-modal-title"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="upload-modal-title" className="text-lg font-semibold text-gray-800 mt-0 mb-4">
+              Upload URL
+            </h2>
+            <input
+              type="text"
+              value={uploadInputText}
+              onChange={(e) => setUploadInputText(e.target.value)}
+              placeholder="Enter text..."
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 mb-4"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="sign-in-btn"
+                onClick={() => {
+                  setUploadModalOpen(false);
+                  setUploadInputText("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sign-in-btn"
+                onClick={() => {
+                  setUploadModalOpen(false);
+                  setUploadInputText("");
+                }}
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Event detail modal */}
+      {detailModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setDetailModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="event-detail-title"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg mx-4 overflow-y-auto max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="event-detail-title" className="text-lg font-semibold text-gray-800 mt-0 mb-4">
+              {detailEvent?.name || "Event details"}
+            </h2>
+            {detailLoading ? (
+              <p>Loading...</p>
+            ) : detailError ? (
+              <p className="text-red-600">{detailError}</p>
+            ) : (
+              <>
+                {(detailEvent?.details?.description || detailEvent?.description) && (
+                  <p className="mb-4 text-gray-700">
+                    {detailEvent.details?.description || detailEvent.description}
+                  </p>
+                )}
+                <p className="text-gray-600 mb-2">
+                  📅 {detailEvent?.date || detailEvent?.details?.date}{detailEvent?.time || detailEvent?.details?.time ? ` at ${detailEvent?.time || detailEvent?.details?.time}` : ""}
+                </p>
+                {detailEvent?.venue && <p className="text-gray-600 mb-2">🏢 {detailEvent.venue}</p>}
+                {detailEvent?.location && <p className="text-gray-600 mb-2">📍 {detailEvent.location}</p>}
+                {detailEvent?.priceRange && detailEvent.priceRange.min !== undefined && (
+                  <p className="text-gray-600 mb-2">
+                    💵 {detailEvent.priceRange.currency || "USD"} ${detailEvent.priceRange.min}
+                    {detailEvent.priceRange.max && detailEvent.priceRange.max !== detailEvent.priceRange.min && ` - $${detailEvent.priceRange.max}`}
+                  </p>
+                )}
+                {detailEvent?.url && (
+                  <a
+                    href={detailEvent.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block mt-4 text-purple-600 no-underline font-semibold transition-colors hover:text-purple-800 hover:underline"
+                  >
+                    View on {detailEvent.source} →
+                  </a>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <main className={`flex-1 w-full mx-auto px-4 py-8 flex flex-col gap-6 ${showPreciseLocationSplitView ? "max-w-[100%]" : "max-w-7xl"}`}>
         <Routes>
@@ -375,12 +549,14 @@ function App() {
                       events={events}
                       loading={loading}
                       error={error}
+                      progress={progress}
                       user={user}
                       showPreciseLocationSplitView={showPreciseLocationSplitView}
                       lastSearchArgs={lastSearchArgs}
                       onBackToSearch={handleBackToSearch}
                       selectedMarkerKey={selectedMarkerKey}
                       onMarkerClick={setSelectedMarkerKey}
+                      onEventClick={handleEventClick}
                       listOnly
                     />
                   )}
@@ -426,12 +602,14 @@ function App() {
                     events={events}
                     loading={loading}
                     error={error}
+                    progress={progress}
                     user={user}
                     showPreciseLocationSplitView={showPreciseLocationSplitView}
                     lastSearchArgs={lastSearchArgs}
                     onBackToSearch={handleBackToSearch}
                     selectedMarkerKey={selectedMarkerKey}
                     onMarkerClick={setSelectedMarkerKey}
+                    onEventClick={handleEventClick}
                   />
                 )}
               </>
