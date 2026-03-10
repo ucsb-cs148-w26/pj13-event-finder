@@ -1,5 +1,6 @@
 import hashlib
 import json
+import math
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
 
@@ -179,3 +180,48 @@ def apply_local_filters(
 
         filtered.append(ev)
     return filtered
+
+
+# ---------------------------------------------------------------------------
+# Uploaded URL queries
+# ---------------------------------------------------------------------------
+UPLOADED_COLLECTION = "urls_added"
+
+
+def _haversine_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Return the great-circle distance in miles between two points."""
+    R = 3959  # Earth radius in miles
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlng / 2) ** 2)
+    return 2 * R * math.asin(math.sqrt(a))
+
+
+def get_uploaded_events_near(
+    lat: float,
+    lng: float,
+    radius_miles: float = 50,
+) -> List[Dict]:
+    """
+    Return events from user-uploaded URLs whose centroid falls within
+    *radius_miles* of the given coordinates.
+
+    Scans all docs in urls_added and filters in-memory via haversine.
+    Acceptable at small scale (tens to low hundreds of uploaded URLs).
+    """
+    try:
+        docs = db.collection(UPLOADED_COLLECTION).stream()
+        all_events: List[Dict] = []
+        for doc in docs:
+            data = doc.to_dict()
+            c_lat = data.get("centroid_lat")
+            c_lng = data.get("centroid_lng")
+            if c_lat is not None and c_lng is not None:
+                if _haversine_miles(lat, lng, c_lat, c_lng) <= radius_miles:
+                    all_events.extend(data.get("events", []))
+        return all_events
+    except Exception as e:
+        print(f"[uploaded] get_uploaded_events_near error: {e}")
+        return []

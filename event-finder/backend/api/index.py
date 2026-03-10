@@ -4,15 +4,14 @@ from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from api.llm_router import route_and_fetch_events
 from api import ticketmaster, allevents
-from api.open_scraper import find_event_site_url, scrape_events_from_url
+from api.open_scraper import find_event_site_url, scrape_events_from_url, scrape_events_with_location
 from api.eventbrite_scraper import scrape_eventbrite
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
-import re
+from firebase_database.cache import check_cache, store_cache, apply_local_filters, get_uploaded_events_near
 import json
 import threading
-from firebase_database.cache import check_cache, store_cache, apply_local_filters
-
+import datetime
+from typing import Any, Dict, List, Optional, Tuple
+import re
 
 load_dotenv()
 
@@ -103,11 +102,11 @@ def search_events(
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip().lower())
 
-def _parse_dt(value: Any) -> Optional[datetime]:
+def _parse_dt(value: Any) -> Optional[datetime.datetime]:
     """Best-effort parse; returns None if unknown format."""
     if not value:
         return None
-    if isinstance(value, datetime):
+    if isinstance(value, datetime.datetime):
         return value
     if isinstance(value, str):
         # Handles ISO-like: 2026-03-05T11:45, 2026-03-05T11:45:00, 2026-03-05 11:45
@@ -166,7 +165,7 @@ def _extract_price_range(event: Dict[str, Any]) -> Tuple[Optional[float], Option
 
     return None, None
 
-def _extract_start_end(event: Dict[str, Any]) -> Tuple[Optional[datetime], Optional[datetime]]:
+def _extract_start_end(event: Dict[str, Any]) -> Tuple[Optional[datetime.datetime], Optional[datetime.datetime]]:
     # Try common keys
     start = _parse_dt(event.get("start") or event.get("start_date") or event.get("startDate") or event.get("datetime"))
     end = _parse_dt(event.get("end") or event.get("end_date") or event.get("endDate"))
@@ -485,13 +484,14 @@ def get_events_stream(
         # Determine total sources
         using_location = bool(location and not (lat is not None and lon is not None))
         total_sources = 4 if using_location else 1  # TM, AE, EB, OS for location; just TM for lat/lon
-        
+
         # Storage for results from each source
         results = {
             "ticketmaster": None,
             "allevents": None,
             "eventbrite": None,
             "openscraper": None,
+            "uploaded": None,
         }
         results_lock = threading.Lock()
         
@@ -577,6 +577,17 @@ def get_events_stream(
                 print(f"Error fetching OpenScraper: {e}")
                 with results_lock:
                     results["openscraper"] = {"events": [], "error": str(e)}
+
+        def fetch_uploaded_urls(search_lat, search_lng, search_radius):
+            """Fetch events from user-uploaded URLs near the given coordinates."""
+            try:
+                events = get_uploaded_events_near(search_lat, search_lng, search_radius)
+                with results_lock:
+                    results["uploaded"] = {"events": events}
+            except Exception as e:
+                print(f"Error fetching uploaded URLs: {e}")
+                with results_lock:
+                    results["uploaded"] = {"events": [], "error": str(e)}
         
         # Validation check
         if lat is None and lon is None and not location:
@@ -586,11 +597,18 @@ def get_events_stream(
         
         # Start threads for data fetching
         threads = []
-        
+
         t = threading.Thread(target=fetch_ticketmaster, daemon=True)
         t.start()
         threads.append(("Ticketmaster", t))
-        
+
+        if not using_location and lat is not None and lon is not None:
+            # For lat/lon searches, we can query uploaded URLs in parallel
+            t = threading.Thread(target=fetch_uploaded_urls, args=(lat, lon, radius or 25), daemon=True)
+            t.start()
+            threads.append(("Uploaded URLs", t))
+            total_sources += 1
+
         if using_location:
             t = threading.Thread(target=fetch_allevents, daemon=True)
             t.start()
@@ -617,40 +635,68 @@ def get_events_stream(
         ae_data = results.get("allevents") or {"events": []}
         eb_data = results.get("eventbrite") or {"events": []}
         os_data = results.get("openscraper") or {"events": []}
-        
+
+        # For city/state searches, query uploaded URLs using centroid of collected events
+        if using_location and results.get("uploaded") is None:
+            all_source_events = (
+                tm_data.get("events", []) + ae_data.get("events", [])
+                + eb_data.get("events", []) + os_data.get("events", [])
+            )
+            coord_lats = [float(e["latitude"]) for e in all_source_events if e.get("latitude") is not None]
+            coord_lngs = [float(e["longitude"]) for e in all_source_events if e.get("longitude") is not None]
+            if coord_lats and coord_lngs:
+                centroid_lat = sum(coord_lats) / len(coord_lats)
+                centroid_lng = sum(coord_lngs) / len(coord_lngs)
+                try:
+                    uploaded = get_uploaded_events_near(centroid_lat, centroid_lng, 50)
+                    results["uploaded"] = {"events": uploaded}
+                except Exception as e:
+                    print(f"Error fetching uploaded URLs (city/state): {e}")
+                    results["uploaded"] = {"events": []}
+            else:
+                results["uploaded"] = {"events": []}
+
+        uu_data = results.get("uploaded") or {"events": []}
+
         combined_events = []
         seen_event_keys = set()
-        
+
         def get_event_key(name, date_str):
             name_norm = str(name).lower().strip()
             date_norm = str(date_str)[:10] if date_str else "unknown-date"
             return f"{name_norm}|{date_norm}"
-        
+
         for event in tm_data.get("events", []):
             key = get_event_key(event.get("name"), event.get("date"))
             if key not in seen_event_keys:
                 event["source"] = "Ticketmaster"
                 combined_events.append(event)
                 seen_event_keys.add(key)
-        
+
         for event in ae_data.get("events", []):
             key = get_event_key(event.get("name"), event.get("date"))
             if key not in seen_event_keys:
                 combined_events.append(event)
                 seen_event_keys.add(key)
-        
+
         for event in eb_data.get("events", []):
             key = get_event_key(event.get("name"), event.get("date"))
             if key not in seen_event_keys:
                 combined_events.append(event)
                 seen_event_keys.add(key)
-        
+
         for event in os_data.get("events", []):
             key = get_event_key(event.get("name"), event.get("date"))
             if key not in seen_event_keys:
                 combined_events.append(event)
                 seen_event_keys.add(key)
-        
+
+        for event in uu_data.get("events", []):
+            key = get_event_key(event.get("name"), event.get("date"))
+            if key not in seen_event_keys:
+                combined_events.append(event)
+                seen_event_keys.add(key)
+
         # Send final results
         final_data = {
             "events": combined_events,
@@ -661,6 +707,7 @@ def get_events_stream(
             "allevents_status": "error" if "error" in ae_data else "ok",
             "eventbrite_status": "error" if "error" in eb_data else "ok",
             "openscraper_status": "error" if "error" in os_data else "ok",
+            "uploaded_status": "error" if "error" in uu_data else "ok",
         }
         yield f"data: {json.dumps(final_data)}\n\n"
     
@@ -711,6 +758,73 @@ def scrape_events(location: str):
 
     scrape_result["source_url"] = url
     return scrape_result
+
+
+@app.post("/api/upload-url")
+def upload_url(payload: dict):
+    """
+    Validates a user-submitted URL by attempting to scrape events from it.
+    Infers location automatically from page content.
+    If events are found, stores the URL + events + centroid in Firestore under urls_added/.
+    Usage: POST /api/upload-url  body: {"url": "https://..."}
+    """
+    from api.firestore import db
+
+    url = (payload.get("url") or "").strip()
+    if not url:
+        return {"success": False, "error": "No URL provided."}
+
+    # Scrape events and detect location from page content
+    scrape_result = scrape_events_with_location(url)
+
+    # Check for scrape errors
+    if "error" in scrape_result or "_scrape_failure_reason" in scrape_result:
+        reason = scrape_result.get("_scrape_failure_reason", "")
+        error_map = {
+            "http_403": "Site is blocking access (403 Forbidden).",
+            "http_429": "Site is rate-limiting requests. Try again later.",
+            "js_rendered": "Page appears empty — it may require JavaScript to load.",
+            "fetch_error": "Could not reach the URL. Check that it's valid and accessible.",
+        }
+        message = error_map.get(reason, scrape_result.get("error", "Unable to scrape this URL."))
+        return {"success": False, "error": message}
+
+    events = scrape_result.get("events", [])
+    if not events:
+        return {"success": False, "error": "No events found on this page."}
+
+    detected_city = scrape_result.get("detected_city", "")
+    detected_state = scrape_result.get("detected_state", "")
+    location_label = (
+        f"{detected_city}, {detected_state}" if detected_city and detected_state
+        else detected_city or "Unknown"
+    )
+
+    # Compute centroid from event coordinates
+    lats = [float(e["latitude"]) for e in events if e.get("latitude") is not None]
+    lngs = [float(e["longitude"]) for e in events if e.get("longitude") is not None]
+    centroid_lat = sum(lats) / len(lats) if lats else None
+    centroid_lng = sum(lngs) / len(lngs) if lngs else None
+
+    # Store in Firestore under urls_added/
+    doc_ref = db.collection("urls_added").document()
+    doc_ref.set({
+        "url": url,
+        "detected_city": detected_city,
+        "detected_state": detected_state,
+        "centroid_lat": centroid_lat,
+        "centroid_lng": centroid_lng,
+        "events": events,
+        "event_count": len(events),
+        "added_at": datetime.datetime.utcnow().isoformat(),
+    })
+
+    return {
+        "success": True,
+        "event_count": len(events),
+        "location": location_label,
+        "message": f"URL added — found {len(events)} event(s) in {location_label}.",
+    }
 
 
 @app.get("/api/eventbrite-scrape")
