@@ -1,4 +1,3 @@
-import React from "react";
 import BookmarkStar from "./components/bookmarkStar";
 
 function EventCard({ event, user, compact, distanceFromCenterMiles, onClick }) {
@@ -62,6 +61,12 @@ function EventCard({ event, user, compact, distanceFromCenterMiles, onClick }) {
               ` - $${event.priceRange.max}`}
           </p>
         )}
+
+        {!event.priceRange && event.price !== undefined && event.price !== null && event.price !== "Unknown" && (
+          <p className="m-2 text-gray-600 text-sm">
+          {event.price === 0 ? "Free" : event.price}
+        </p>
+)}
 
         {event.url && (
           <a

@@ -2,6 +2,7 @@ import os
 import json
 import ssl
 import urllib3
+from urllib.parse import urlparse
 import cloudscraper
 from bs4 import BeautifulSoup
 from typing import Dict, Any
@@ -266,6 +267,78 @@ def _filter_events(events, start_date=None, end_date=None, event_type=None, cate
     return filtered
 
 
+def _fetch_and_clean(url: str) -> Dict[str, Any]:
+    """
+    Fetches a URL with cloudscraper and returns cleaned page text.
+    Returns {"page_text": str} on success, or {"error": str, "_scrape_failure_reason": str} on failure.
+    """
+    try:
+        scraper = cloudscraper.create_scraper(
+            browser={
+                'browser': 'chrome',
+                'platform': 'windows',
+                'desktop': True
+            }
+        )
+        scraper.mount("https://", _SSLAdapter())
+        res = scraper.get(url, timeout=15, verify=False)
+
+        if res.status_code == 403:
+            return {
+                "error": "HTTP 403 Forbidden — site is blocking the scraper.",
+                "_scrape_failure_reason": "http_403",
+            }
+        if res.status_code == 429:
+            return {
+                "error": "HTTP 429 Too Many Requests — rate limited.",
+                "_scrape_failure_reason": "http_429",
+            }
+        res.raise_for_status()
+
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        img_tags = soup.find_all("img")
+        image_info = []
+        for img in img_tags:
+            src = img.get("src") or img.get("data-src") or ""
+            alt = img.get("alt", "")
+            if src and src.startswith("http"):
+                image_info.append(f'[IMAGE: alt="{alt}" src="{src}"]')
+
+        # Extract links so the LLM can map events to individual URLs
+        link_tags = soup.find_all("a", href=True)
+        link_info = []
+        for a in link_tags:
+            href = a["href"]
+            text = a.get_text(strip=True)[:100]
+            if href.startswith("http") and text:
+                link_info.append(f'[LINK: text="{text}" href="{href}"]')
+
+        for script in soup(["script", "style"]):
+            script.extract()
+
+        page_text = soup.get_text(separator=' ', strip=True)
+        page_text = page_text[:35000]
+        if image_info:
+            page_text += "\n\nEXTRACTED IMAGES:\n" + "\n".join(image_info[:50])
+        if link_info:
+            page_text += "\n\nEXTRACTED LINKS:\n" + "\n".join(link_info[:100])
+
+        if len(page_text) < 500:
+            return {
+                "error": "Page loaded but appears empty. The site may require JavaScript rendering.",
+                "_scrape_failure_reason": "js_rendered",
+            }
+
+        return {"page_text": page_text}
+
+    except Exception as e:
+        return {
+            "error": f"Failed to fetch or parse URL: {str(e)}",
+            "_scrape_failure_reason": "fetch_error",
+        }
+
+
 def scrape_events_from_url(
     url: str,
     location_context: str,
@@ -287,70 +360,11 @@ def scrape_events_from_url(
     if not api_key:
         return {"error": "OPENAI_API_KEY not configured in environment."}
 
-    # 1. Fetch and clean the webpage text using cloudscraper
-    try:
-        # Create a Cloudscraper instance designed to bypass WAFs/Cloudflare
-        scraper = cloudscraper.create_scraper(
-            browser={
-                'browser': 'chrome',
-                'platform': 'windows',
-                'desktop': True
-            }
-        )
-        # Mount the SSL adapter so verify=False works correctly with
-        # urllib3 2.x + OpenSSL 3.x (check_hostname must be disabled before
-        # setting CERT_NONE, which the adapter handles).
-        scraper.mount("https://", _SSLAdapter())
-
-        res = scraper.get(url, timeout=15, verify=False)
-
-        if res.status_code == 403:
-            return {
-                "error": f"HTTP 403 Forbidden — site is blocking the scraper.",
-                "_scrape_failure_reason": "http_403",
-            }
-        if res.status_code == 429:
-            return {
-                "error": "HTTP 429 Too Many Requests — rate limited.",
-                "_scrape_failure_reason": "http_429",
-            }
-        res.raise_for_status()
-
-        soup = BeautifulSoup(res.text, "html.parser")
-
-        # Extract image URLs before stripping tags
-        img_tags = soup.find_all("img")
-        image_info = []
-        for img in img_tags:
-            src = img.get("src") or img.get("data-src") or ""
-            alt = img.get("alt", "")
-            if src and src.startswith("http"):
-                image_info.append(f"[IMAGE: alt=\"{alt}\" src=\"{src}\"]")
-
-        # Remove script and style elements to reduce noise
-        for script in soup(["script", "style"]):
-            script.extract()
-
-        # Get text and condense whitespace
-        page_text = soup.get_text(separator=' ', strip=True)
-
-        # Truncate text to avoid blowing up the LLM context window
-        page_text = page_text[:35000]
-        if image_info:
-            page_text += "\n\nEXTRACTED IMAGES:\n" + "\n".join(image_info[:50])
-
-        # If the page text is practically empty, it might be heavily JS-rendered
-        if len(page_text) < 500:
-            return {
-                "error": "Page loaded but appears empty. The site may require JavaScript rendering.",
-                "_scrape_failure_reason": "js_rendered",
-            }
-
-    except Exception as e:
-        return {
-            "error": f"Failed to fetch or parse URL: {str(e)}",
-            "_scrape_failure_reason": "fetch_error",
-        }
+    # 1. Fetch and clean the webpage text
+    fetch_result = _fetch_and_clean(url)
+    if "error" in fetch_result:
+        return fetch_result
+    page_text = fetch_result["page_text"]
 
     # 2. Setup the LLM request
     model = os.getenv("OPENAI_ROUTER_MODEL", "gpt-4.1-mini")
@@ -439,6 +453,141 @@ def scrape_events_from_url(
             "url_scraped": url,
             "events": filtered,
             "total": len(filtered),
+        }
+    except Exception as e:
+        return {"error": f"OpenAI API Error: {str(e)}"}
+
+
+def scrape_events_with_location(url: str) -> Dict[str, Any]:
+    """
+    Scrapes a URL and extracts events along with the detected city/state.
+    Used by the upload-url endpoint where the location is unknown and must be
+    inferred from the page content.
+
+    Returns:
+        On success: {"events": [...], "detected_city": str, "detected_state": str, "url_scraped": str}
+        On failure: {"error": str, "_scrape_failure_reason": str}
+    """
+    if OpenAI is None:
+        return {"error": "OpenAI package not installed."}
+
+    api_key = get_openai_api_key()
+    if not api_key:
+        return {"error": "OPENAI_API_KEY not configured in environment."}
+
+    fetch_result = _fetch_and_clean(url)
+    if "error" in fetch_result:
+        return fetch_result
+    page_text = fetch_result["page_text"]
+
+    model = os.getenv("OPENAI_ROUTER_MODEL", "gpt-4.1-mini")
+    client = OpenAI(api_key=api_key)
+
+    response_format = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "event_scraper_with_location",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "detected_city": {
+                        "type": "string",
+                        "description": "The city where most events on this page take place"
+                    },
+                    "detected_state": {
+                        "type": "string",
+                        "description": "The US state (full name) where most events take place, or empty string if not in the US"
+                    },
+                    "events": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "name": {"type": "string"},
+                                "start_date": {"type": "string", "description": "ISO 8601 format (YYYY-MM-DDTHH:MM) or YYYY-MM-DD"},
+                                "end_date": {"type": "string", "description": "ISO 8601 format or YYYY-MM-DD. Use start_date if unknown."},
+                                "event_type": {"type": "string", "description": "e.g., music, sports, workshop, festival"},
+                                "price": {"type": "string", "description": "Price amount, 'Free', or 'Unknown'"},
+                                "latitude": {"type": "number", "description": "Approximate latitude based on venue/city"},
+                                "longitude": {"type": "number", "description": "Approximate longitude based on venue/city"},
+                                "image": {"type": "string", "description": "URL of the event image/thumbnail if available, or empty string"},
+                                "venue": {"type": "string", "description": "Name of the venue where the event takes place, or empty string if unknown"},
+                                "description": {"type": "string", "description": "Brief description of the event (1-2 sentences), or empty string if not available"},
+                                "event_url": {"type": "string", "description": "Direct URL to this specific event's detail page if a link is found in the HTML, or empty string if not found"},
+                            },
+                            "required": ["name", "start_date", "end_date", "event_type", "price", "latitude", "longitude", "image", "venue", "description", "event_url"]
+                        }
+                    }
+                },
+                "required": ["detected_city", "detected_state", "events"]
+            }
+        }
+    }
+
+    instructions = """
+    You are an expert data extraction assistant. Extract all distinct events from the following webpage.
+    Also determine the primary city and US state where these events take place, based on venue names,
+    addresses, and other geographic clues in the text.
+
+    For latitude and longitude: Use your geographic knowledge to estimate coordinates based on venue names and addresses found in the text.
+    For price: If not listed, output 'Unknown'. If free, output 'Free'.
+    For image: Extract the event image/thumbnail URL if available from the EXTRACTED IMAGES section. Match images to events by alt text or proximity. If not found, output an empty string.
+    For detected_state: Use the full state name (e.g., "California", not "CA"). If the events are not in the US, output an empty string.
+    For venue: Extract the venue or location name where the event is held (e.g., "Madison Square Garden", "Central Park"). Output empty string if not found.
+    For description: Write a brief 1-2 sentence description of the event based on the page content. Output empty string if insufficient information.
+    For event_url: Look for hyperlinks in the page that lead to individual event detail pages. Extract the full absolute URL. Output empty string if no specific event link is found.
+    """
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": instructions.strip()},
+                {"role": "user", "content": f"Here is the webpage text:\n\n{page_text}"}
+            ],
+            response_format=response_format,
+            temperature=0.1,
+        )
+
+        result = json.loads(resp.choices[0].message.content)
+        raw_events = result.get("events", [])
+        detected_city = result.get("detected_city", "")
+        detected_state = result.get("detected_state", "")
+        location_label = f"{detected_city}, {detected_state}" if detected_city and detected_state else detected_city or "Unknown"
+
+        # Extract domain name for display (e.g., "eventbrite.com")
+        domain = urlparse(url).netloc.removeprefix("www.")
+
+        normalized = []
+        for ev in raw_events:
+            event_url = ev.get("event_url", "").strip()
+            evt = {
+                "name": ev.get("name", ""),
+                "date": (ev.get("start_date") or "")[:10],
+                "time": (ev.get("start_date") or "")[11:] if "T" in (ev.get("start_date") or "") else "",
+                "end_date": (ev.get("end_date") or "")[:10],
+                "location": location_label,
+                "venue": ev.get("venue", ""),
+                "description": ev.get("description", ""),
+                "image": ev.get("image", ""),
+                "url": event_url if event_url else url,
+                "price": ev.get("price", "Unknown"),
+                "type": ev.get("event_type", ""),
+                "latitude": ev.get("latitude"),
+                "longitude": ev.get("longitude"),
+                "source": domain,
+            }
+            normalized.append(evt)
+
+        return {
+            "url_scraped": url,
+            "events": normalized,
+            "total": len(normalized),
+            "detected_city": detected_city,
+            "detected_state": detected_state,
         }
     except Exception as e:
         return {"error": f"OpenAI API Error: {str(e)}"}

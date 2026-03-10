@@ -1,15 +1,14 @@
 // src/App.js
-import React, { useCallback, useEffect, useState } from "react";
-import { Routes, Route } from "react-router-dom";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 
-import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { auth, googleProvider } from "./utils/firebase";
 
-import SearchPanel from "./components/searchPanel";
-import ResultsPanel from "./components/resultsPanel";
 import ProfileBookmarksPage from "./components/profileBookmarksPage";
+import ResultsPanel from "./components/resultsPanel";
+import SearchPanel from "./components/searchPanel";
 import MapView from "./MapView";
 
 function add24HoursToDateTime(dateTimeStr) {
@@ -65,6 +64,8 @@ function App() {
   const [isSelectingLocationOnMap, setIsSelectingLocationOnMap] = useState(false); // true when waiting for user to click on map to place pin
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [uploadInputText, setUploadInputText] = useState("");
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null); // { success, message } or null
   // event detail modal state
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailEvent, setDetailEvent] = useState(null);
@@ -309,6 +310,33 @@ function App() {
     setSelectedMarkerKey(null);
   };
 
+  // called when user submits a URL to upload
+  const handleUploadSubmit = async () => {
+    const url = uploadInputText.trim();
+    if (!url) return;
+    setUploadLoading(true);
+    setUploadResult(null);
+    try {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+      const res = await fetch(`${backendUrl}/api/upload-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUploadResult({ success: true, message: data.message });
+        setUploadInputText("");
+      } else {
+        setUploadResult({ success: false, message: data.error || "Something went wrong." });
+      }
+    } catch (err) {
+      setUploadResult({ success: false, message: "Could not reach the server." });
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
   // called when user clicks an event card
   const handleEventClick = async (event) => {
     setDetailEvent(event);
@@ -397,7 +425,7 @@ function App() {
       {uploadModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-          onClick={() => setUploadModalOpen(false)}
+          onClick={() => { setUploadModalOpen(false); setUploadResult(null); }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="upload-modal-title"
@@ -413,17 +441,26 @@ function App() {
               type="text"
               value={uploadInputText}
               onChange={(e) => setUploadInputText(e.target.value)}
-              placeholder="Enter text..."
+              placeholder="Enter a URL with events..."
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 mb-4"
               autoFocus
+              disabled={uploadLoading}
+              onKeyDown={(e) => { if (e.key === "Enter") handleUploadSubmit(); }}
             />
+            {uploadResult && (
+              <p className={`text-sm mb-3 ${uploadResult.success ? "text-green-600" : "text-red-600"}`}>
+                {uploadResult.message}
+              </p>
+            )}
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 className="sign-in-btn"
+                disabled={uploadLoading}
                 onClick={() => {
                   setUploadModalOpen(false);
                   setUploadInputText("");
+                  setUploadResult(null);
                 }}
               >
                 Cancel
@@ -431,12 +468,10 @@ function App() {
               <button
                 type="button"
                 className="sign-in-btn"
-                onClick={() => {
-                  setUploadModalOpen(false);
-                  setUploadInputText("");
-                }}
+                disabled={uploadLoading || !uploadInputText.trim()}
+                onClick={handleUploadSubmit}
               >
-                Submit
+                {uploadLoading ? "Checking..." : "Submit"}
               </button>
             </div>
           </div>
@@ -479,6 +514,11 @@ function App() {
                   <p className="text-gray-600 mb-2">
                     💵 {detailEvent.priceRange.currency || "USD"} ${detailEvent.priceRange.min}
                     {detailEvent.priceRange.max && detailEvent.priceRange.max !== detailEvent.priceRange.min && ` - $${detailEvent.priceRange.max}`}
+                  </p>
+                )}
+                {!detailEvent?.priceRange && detailEvent?.price && detailEvent.price !== "Unknown" && (
+                  <p className="text-gray-600 mb-2">
+                    💵 {detailEvent.price}
                   </p>
                 )}
                 {detailEvent?.url && (
