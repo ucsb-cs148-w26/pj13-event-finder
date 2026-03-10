@@ -10,4 +10,4 @@ cloudscraper
 firebase-admin
 dotenv
 datetime
-urlparse
+urllib

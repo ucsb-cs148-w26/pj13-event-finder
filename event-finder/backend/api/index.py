@@ -102,11 +102,11 @@ def search_events(
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip().lower())
 
-def _parse_dt(value: Any) -> Optional[datetime]:
+def _parse_dt(value: Any) -> Optional[datetime.datetime]:
     """Best-effort parse; returns None if unknown format."""
     if not value:
         return None
-    if isinstance(value, datetime):
+    if isinstance(value, datetime.datetime):
         return value
     if isinstance(value, str):
         # Handles ISO-like: 2026-03-05T11:45, 2026-03-05T11:45:00, 2026-03-05 11:45
@@ -165,7 +165,7 @@ def _extract_price_range(event: Dict[str, Any]) -> Tuple[Optional[float], Option
 
     return None, None
 
-def _extract_start_end(event: Dict[str, Any]) -> Tuple[Optional[datetime], Optional[datetime]]:
+def _extract_start_end(event: Dict[str, Any]) -> Tuple[Optional[datetime.datetime], Optional[datetime.datetime]]:
     # Try common keys
     start = _parse_dt(event.get("start") or event.get("start_date") or event.get("startDate") or event.get("datetime"))
     end = _parse_dt(event.get("end") or event.get("end_date") or event.get("endDate"))
