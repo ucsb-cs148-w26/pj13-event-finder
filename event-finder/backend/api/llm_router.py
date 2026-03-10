@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 from api import ticketmaster, allevents
 from api.eventbrite_scraper import scrape_eventbrite
 from dotenv import load_dotenv
@@ -268,9 +269,34 @@ Output format (JSON only):
     return parsed
 
 
+_KNOWN_SOURCES: Dict[str, str] = {
+    "ticketmaster": "Ticketmaster",
+    "ticketweb": "Ticket Web",
+    "livenation": "Live Nation",
+    "eventbrite": "Eventbrite",
+    "allevents": "All Events",
+}
+
+
+def _source_from_url(url: str, fallback: str) -> str:
+    """Derive a display source name from the event's actual URL domain."""
+    if not url:
+        return fallback
+    domain = urlparse(url).netloc.removeprefix("www.")
+    if not domain:
+        return fallback
+    # Check if any known source keyword appears in the domain
+    domain_lower = domain.lower()
+    for key, name in _KNOWN_SOURCES.items():
+        if key in domain_lower:
+            return name
+    return domain
+
+
 def _normalize_event(provider: str, e: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(e)
     out["provider"] = provider
+    out.setdefault("source", _source_from_url(out.get("url", ""), provider))
 
     out.setdefault("id", "")
     out.setdefault("name", "Unknown Event")
