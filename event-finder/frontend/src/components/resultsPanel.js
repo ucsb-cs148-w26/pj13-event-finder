@@ -160,7 +160,7 @@ export default function ResultsPanel({
       )}
 
       {loading ? (
-        <ProgressBar progress={progress} label="Aggregating events from all sources..." />
+        <ProgressBar progress={progress} label="Aggregating events from all sources... (may take a few minutes)" />
       ) : events.length === 0 && !error ? (
         <div className="text-center py-12 text-gray-600">
           <p>Enter a location and click "Search" to find events in your area.</p>
