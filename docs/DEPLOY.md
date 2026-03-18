@@ -9,7 +9,10 @@ Backend: https://pj13-event-finder-backend.vercel.app/
 
 pip, node.js v24.13.0, npm v11.6.2
 Obtain a TicketMaster API key from https://developer-acct.ticketmaster.com/user, add it to backend .env named TICKETMASTER_API_KEY
-
+Also add to backend .env:
+Openai API key: OPENAI_API_KEY
+Firebase JSON: FIREBASE_SERVICE_ACCOUNT_JSON
+Google Maps API key: REACT_APP_GOOGLE_MAPS_API_KEY
 ## Dependencies
 
 Backend: fastapi, uvicorn, requests, python-dotenv, httpx, openai, beautifulsoup4
