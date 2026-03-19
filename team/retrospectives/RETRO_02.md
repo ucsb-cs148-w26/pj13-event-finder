@@ -31,18 +31,24 @@
 ## Retro Assessment
 
 * A brief description of what retro outline or process you used.
-We used Start, stop, continue
+
+  We used Start, stop, continue
 * A brief assessment of how it went.
-It went super well, all concerns were voiced. We mainly addressed the issue of the number of increasing bugs.
+
+  It went super well, all concerns were voiced. We mainly addressed the issue of the number of increasing bugs.
 * What advice would you give to the next person leading a retro
   based on what you learned today? Be very descriptive of what we talk about
-Communicate with everyone well.
+
+  Communicate with everyone well.
 
 ## Experiment/Change
 
 * A brief description of what constitutes your change/experiment
-We've noticed a rising number of bugs now that we have more features that interact with eachother in our codebase.
+
+  We've noticed a rising number of bugs now that we have more features that interact with eachother in our codebase. We plan to increase the amount of testing we do before pushing changes to production.
 * A brief assessment of how its results (did it improve things? move the needle at all?)
-This definitely helped things. We had less features pushed due to more testing, but there have been much less issues in the deployed codebase, which has made developing futher features a lot more seamless.
+
+  This definitely helped things. We had less features pushed due to more testing, but there have been much less issues in the deployed codebase, which has made developing futher features a lot more seamless.
 * A decision going forward: keep the change, revert to previous procedure, make a new change? 
-Keep the change, and know that we will get better and better at debugging our code.
+
+  Keep the change, and know that we will get better and better at debugging our code.
